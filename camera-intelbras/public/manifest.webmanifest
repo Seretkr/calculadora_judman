@@ -1,0 +1,12 @@
+{
+  "name": "Olho Intelbras",
+  "short_name": "Olho",
+  "description": "Teste de conexão de câmeras e gravadores Intelbras na rede interna.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [{ "src": "/icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

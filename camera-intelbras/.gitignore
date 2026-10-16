@@ -1,0 +1,4 @@
+# Senha do app (hash) e certificado HTTPS ficam só no computador
+config.json
+certificado/
+node_modules/

@@ -1,0 +1,13 @@
+{
+  "name": "olho-intelbras",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Teste de conexão de câmeras e gravadores Intelbras na rede interna",
+  "main": "servidor.js",
+  "scripts": {
+    "start": "node servidor.js",
+    "trocar-senha": "node servidor.js --trocar-senha"
+  },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED"
+}

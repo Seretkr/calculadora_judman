@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="robots" content="noindex, nofollow">
+<title>Olho Intelbras</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icone.svg">
+<link rel="stylesheet" href="/estilo.css">
+</head>
+<body>
+<header class="topo">
+  <div class="marca"><img src="/icone.svg" alt="" width="28" height="28"> Olho Intelbras</div>
+  <button id="sair" class="link" hidden>Sair</button>
+</header>
+
+<main>
+  <section id="tela-entrar" class="cartao" hidden>
+    <h1>Entrar</h1>
+    <p class="fraco">Digite a senha do app que apareceu no computador ao iniciar.</p>
+    <form id="form-entrar">
+      <label>Senha do app <input id="senha-app" type="password" autocomplete="current-password" required></label>
+      <button class="principal">Entrar</button>
+      <p id="erro-entrar" class="erro" role="alert"></p>
+    </form>
+  </section>
+
+  <section id="tela-app" hidden>
+    <form id="form-teste" class="cartao">
+      <label>IP da câmera ou do gravador
+        <input id="ip" inputmode="decimal" autocomplete="off" placeholder="192.168.1.108" required pattern="[0-9.]+">
+      </label>
+      <div id="recentes" class="recentes"></div>
+      <div class="duas">
+        <label>Usuário <input id="usuario" value="admin" autocomplete="username" autocapitalize="none"></label>
+        <label>Senha <input id="senha" type="password" autocomplete="current-password"></label>
+      </div>
+      <details>
+        <summary>Portas</summary>
+        <div class="duas">
+          <label>Web (HTTP) <input id="porta-http" inputmode="numeric" value="80"></label>
+          <label>Vídeo (RTSP) <input id="porta-rtsp" inputmode="numeric" value="554"></label>
+        </div>
+      </details>
+      <button id="testar" class="principal">Testar conexão</button>
+    </form>
+
+    <section id="resultado" aria-live="polite"></section>
+  </section>
+</main>
+
+<dialog id="visor">
+  <img id="visor-img" alt="">
+  <div class="visor-barra">
+    <span id="visor-titulo"></span>
+    <button id="visor-atualizar">Atualizar</button>
+    <button id="visor-fechar">Fechar</button>
+  </div>
+</dialog>
+
+<script src="/app.js"></script>
+</body>
+</html>
