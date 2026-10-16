@@ -12,7 +12,34 @@ permissions:
   contents: write
 
 jobs:
+  # Testes do servidor, do código Java (Intelbras.java), da tela e de segurança. O APK só sai se passarem.
+  testes:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: camera-intelbras
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Navegador para os testes de tela
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Rodar testes
+        run: npm test
+
   apk:
+    needs: testes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

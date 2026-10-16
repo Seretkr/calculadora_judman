@@ -6,7 +6,8 @@
   "main": "servidor.js",
   "scripts": {
     "start": "node servidor.js",
-    "trocar-senha": "node servidor.js --trocar-senha"
+    "trocar-senha": "node servidor.js --trocar-senha",
+    "test": "node --test --test-concurrency=1 testes/*.test.js"
   },
   "engines": { "node": ">=18" },
   "license": "UNLICENSED"
