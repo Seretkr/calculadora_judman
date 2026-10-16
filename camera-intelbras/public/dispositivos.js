@@ -44,7 +44,7 @@ async function desenharLista() {
 $('busca').addEventListener('input', desenharLista);
 document.addEventListener('aba', (e) => { if (e.detail === 'dispositivos') desenharLista(); });
 $('novo').addEventListener('click', () => abrirCadastro(null, {}));
-$('backup').addEventListener('click', () => abrirTela('tela-backup', 'Backup'));
+$('backup').addEventListener('click', () => abrirTela('tela-backup', 'Backup e exportação'));
 
 async function testarVarios(lista, aoAndar) {
   let feitos = 0;

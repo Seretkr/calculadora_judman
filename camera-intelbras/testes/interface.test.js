@@ -8,6 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const falsos = require('./apoio/aparelhos-falsos');
 const { iniciarServidor, SENHA } = require('./apoio/servidor-teste');
+const { lerZip } = require('./apoio/ler-zip');
 
 function carregarPlaywright() {
   for (const m of ['playwright', '/opt/node22/lib/node_modules/playwright']) {
@@ -172,6 +173,69 @@ describe('app Android (tela)', () => {
     assert.equal(d.senhaCifrada, 'c:' + Buffer.from('senha123').toString('base64'));
     assert.equal(await p.evaluate(async () => (await banco.listar()).filter((x) => x.fotoCadastro instanceof Blob).length), 3);
     await p.evaluate(() => window.voltar());
+  });
+
+  t('exportar ZIP: todos os cadastros e fotos, sem senhas', async () => {
+    // observação com cara de fórmula e nome com ; e aspas, para conferir a planilha
+    await p.evaluate(async () => {
+      const d = (await banco.listar()).find((x) => x.ip === '192.168.77.20');
+      d.obs = '=HYPERLINK("http://mal")';
+      d.nome = 'Portão; "frente"';
+      await banco.salvar(d);
+    });
+    await p.click('#abas [data-aba=dispositivos]');
+    await p.click('#backup');
+    await p.click('#zip-botao');
+    await p.waitForFunction(() => window.__compartilhados.some((a) => a.nome.endsWith('.zip')));
+    const { nome, tipo, partes } = await p.evaluate(() => {
+      const a = window.__compartilhados.find((x) => x.nome.endsWith('.zip'));
+      return { ...a, partes: window.__partes[a.nome] };
+    });
+    assert.match(nome, /^olho-dispositivos-\d{4}-\d{2}-\d{2}\.zip$/);
+    assert.equal(tipo, 'application/zip');
+    const buf = Buffer.concat(partes.map((x) => Buffer.from(x, 'base64')));
+    fs.writeFileSync(path.join(os.tmpdir(), 'olho-export-teste.zip'), buf);
+    const arquivos = lerZip(buf);
+    const nomes = Object.keys(arquivos).sort();
+    assert.deepEqual(nomes.filter((n) => !n.startsWith('fotos/')), ['LEIA-ME.txt', 'dispositivos.csv', 'dispositivos.json']);
+    assert.equal(nomes.filter((n) => n.startsWith('fotos/')).length, 4, '3 imagens de câmera + 1 foto de instalação');
+    for (const n of nomes.filter((x) => x.startsWith('fotos/'))) {
+      assert.equal(arquivos[n].dados[0], 0xff, n);
+      assert.equal(arquivos[n].dados[1], 0xd8, n);
+      assert.equal(arquivos[n].utf8, true);
+    }
+
+    const json = JSON.parse(arquivos['dispositivos.json'].dados.toString('utf8'));
+    assert.equal(json.formato, 'olho-intelbras-export');
+    assert.equal(json.senhas, false);
+    assert.equal(json.total, 3);
+    assert.deepEqual(json.dispositivos.map((d) => d.ip), ['192.168.77.10', '192.168.77.20', '192.168.77.41']);
+    const dvr = json.dispositivos[0];
+    assert.equal(dvr.tipo, 'Gravador');
+    assert.equal(dvr.canais, 4);
+    assert.equal(dvr.local, 'Rack');
+    assert.ok(arquivos[dvr.fotos.camera], 'foto da câmera referenciada existe');
+    assert.ok(arquivos[dvr.fotos.instalacao], 'foto da instalação referenciada existe');
+    for (const d of json.dispositivos) {
+      assert.equal(d.senha, undefined);
+      assert.equal(d.senhaCifrada, undefined);
+    }
+
+    // nenhuma senha em lugar nenhum do zip (nem pura, nem cifrada)
+    const cifrada = 'c:' + Buffer.from('senha123').toString('base64');
+    for (const [n, a] of Object.entries(arquivos)) {
+      const texto = a.dados.toString('latin1');
+      assert.ok(!texto.includes('senha123') && !texto.includes(cifrada) && !/senhaCifrada/.test(texto), 'senha vazou em ' + n);
+    }
+
+    const csv = arquivos['dispositivos.csv'].dados.toString('utf8');
+    assert.equal(csv.charCodeAt(0), 0xfeff, 'BOM para o Excel abrir acentos certo');
+    const linhas = csv.slice(1).trim().split('\r\n');
+    assert.equal(linhas.length, 4);
+    assert.match(linhas[0], /^nome;local;ip;usuario;porta_http;porta_rtsp;tipo;modelo;serie;mac;canais;observacoes;/);
+    assert.ok(linhas[2].startsWith('"Portão; ""frente"""'), 'nome com ; e aspas fica entre aspas: ' + linhas[2]);
+    assert.ok(linhas[2].includes(`;"'=HYPERLINK(""http://mal"")";`), 'fórmula neutralizada com apóstrofo: ' + linhas[2]);
+    assert.match(arquivos['LEIA-ME.txt'].dados.toString('utf8'), /SEM SENHAS/);
   });
 
   t('nenhum erro de JavaScript na página', () => { assert.deepEqual(erros, []); });

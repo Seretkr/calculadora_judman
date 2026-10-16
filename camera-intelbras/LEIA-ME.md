@@ -14,6 +14,14 @@ No app Android há também:
 - **Dispositivos:** cadastro com nome, local, IP, usuário, senha e observações. Guarda a **imagem da câmera capturada na hora do cadastro** e a **foto da instalação** tirada com a câmera do celular. Tem busca, "Testar todos" e "Mosaico" com a imagem ao vivo de todos (gravadores mostram todos os canais).
 - **Backup:** gera um arquivo `.olho` com dispositivos, fotos e senhas, cifrado com a senha que você escolher (AES-256-GCM, PBKDF2 com 310 mil rodadas). Guarde no Drive ou no WhatsApp. Use antes de desinstalar o app: os dados somem junto.
 
+- **Exportar ZIP (sem senhas):** em Dispositivos → Backup / Exportar. Gera `olho-dispositivos-AAAA-MM-DD.zip` para levar os cadastros a outro app:
+  - `dispositivos.csv`: planilha (UTF-8, separada por `;`) que abre no Excel e no Google Planilhas;
+  - `dispositivos.json`: os mesmos dados para importação por sistema (`"formato": "olho-intelbras-export"`, `"senhas": false`);
+  - `fotos/`: imagem da câmera e foto da instalação de cada dispositivo (`IP_nome_camera.jpg`, `IP_nome_instalacao.jpg`); as colunas `foto_camera` e `foto_instalacao` dizem qual é de quem;
+  - `LEIA-ME.txt`: explica cada campo.
+
+  A senha nunca entra, nem cifrada: os campos exportados são listados um a um. Textos que começam com `=`, `+`, `-` ou `@` ganham um `'` na frente para a planilha não executar como fórmula.
+
 No cadastro, a senha da câmera é cifrada com uma chave do **Android Keystore**, que não sai do aparelho. Fotos e cadastros ficam só no celular.
 
 Há duas formas de usar:
@@ -95,3 +103,9 @@ As linhas de nuvem (Mibo, iM) usam outro sistema e aparecem como "não reconheci
 | "Senha recusada" | Confira usuário e senha. Depois de 5 erros, espere o desbloqueio da Intelbras. |
 | Canal "Sem imagem" | Canal sem câmera, câmera desligada ou snapshot desativado no aparelho. |
 | Celular não abre o endereço | Celular em outra rede (ex.: Wi-Fi de visitante) ou firewall do Windows bloqueando a porta 8443. |
+
+## Testes e segurança
+
+`npm test` roda 59 testes: servidor, código Java do app, tela no tamanho de celular (inclui backup e exportação ZIP) e segurança. Os testes usam aparelhos falsos, então não precisam de câmera de verdade. No GitHub, o APK só é compilado se os testes passarem.
+
+As vulnerabilidades encontradas e as correções propostas estão em [SEGURANCA.md](SEGURANCA.md).

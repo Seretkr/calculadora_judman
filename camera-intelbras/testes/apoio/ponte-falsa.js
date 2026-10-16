@@ -8,6 +8,8 @@
   const resp = (fn, id, o) => setTimeout(() => window[fn](id, JSON.stringify(o)), 0);
   const parados = new Set();
   window.__arquivos = [];
+  window.__partes = {};
+  window.__compartilhados = [];
   window.Olho = {
     consultar(id, json) {
       const b = JSON.parse(json);
@@ -41,5 +43,11 @@
     decifrar: (s) => atob(s.slice(2)),
     meuIp: () => '192.168.77.5',
     compartilhar: (nome, conteudo) => { window.__arquivos.push({ nome, conteudo }); },
+    gravarParte: (nome, base64, primeiro) => {
+      if (primeiro) window.__partes[nome] = [];
+      window.__partes[nome].push(base64);
+      return true;
+    },
+    compartilharArquivo: (nome, tipo) => { window.__compartilhados.push({ nome, tipo }); },
   };
 })();

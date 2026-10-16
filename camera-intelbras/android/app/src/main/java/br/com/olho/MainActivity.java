@@ -289,6 +289,17 @@ public class MainActivity extends Activity {
 
     // ---------- auxiliares ----------
 
+    private static final long MAX_ARQUIVO = 512L * 1024 * 1024;
+
+    // Arquivo em cache/fotos com nome seguro (só letras, números, ponto, hífen e sublinhado).
+    private File arquivoTemporario(String nome) {
+        String seguro = nome == null ? "" : nome.replaceAll("[^\\w.-]", "_");
+        if (seguro.isEmpty() || seguro.startsWith(".")) return null;
+        File pasta = new File(getCacheDir(), "fotos");
+        if (!pasta.isDirectory() && !pasta.mkdirs()) return null;
+        return new File(pasta, seguro);
+    }
+
     private static int porta(String v, int padrao) {
         try {
             int n = v == null || v.trim().isEmpty() ? padrao : Integer.parseInt(v.trim());
@@ -466,6 +477,38 @@ public class MainActivity extends Activity {
                         .putExtra(Intent.EXTRA_STREAM, u).putExtra(Intent.EXTRA_SUBJECT, nome)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 runOnUiThread(() -> startActivity(Intent.createChooser(envio, "Guardar backup")));
+            } catch (Exception ignorado) {
+                // sem app para receber o arquivo
+            }
+        }
+
+        // Exportação em ZIP: a página manda o arquivo em pedaços (base64) e depois pede para compartilhar.
+        @JavascriptInterface
+        public boolean gravarParte(String nome, String base64, boolean primeiro) {
+            try {
+                File f = arquivoTemporario(nome);
+                if (f == null) return false;
+                byte[] dados = Base64.decode(base64, Base64.NO_WRAP);
+                if (!primeiro && f.length() + dados.length > MAX_ARQUIVO) return false;
+                try (java.io.FileOutputStream out = new java.io.FileOutputStream(f, !primeiro)) {
+                    out.write(dados);
+                }
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public void compartilharArquivo(String nome, String tipo) {
+            try {
+                File f = arquivoTemporario(nome);
+                if (f == null || !f.isFile()) return;
+                Uri u = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".arquivos", f);
+                Intent envio = new Intent(Intent.ACTION_SEND).setType("application/zip".equals(tipo) ? tipo : "application/octet-stream")
+                        .putExtra(Intent.EXTRA_STREAM, u).putExtra(Intent.EXTRA_SUBJECT, f.getName())
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                runOnUiThread(() -> startActivity(Intent.createChooser(envio, "Salvar exportação")));
             } catch (Exception ignorado) {
                 // sem app para receber o arquivo
             }

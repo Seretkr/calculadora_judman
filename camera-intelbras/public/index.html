@@ -90,7 +90,7 @@
           <button type="button" id="novo" class="principal pequeno">+ Novo</button>
           <button type="button" id="testar-todos">Testar todos</button>
           <button type="button" id="mosaico-todos">Mosaico</button>
-          <button type="button" id="backup">Backup</button>
+          <button type="button" id="backup">Backup / Exportar</button>
         </div>
         <p id="disp-status" class="fraco pequeno" aria-live="polite"></p>
       </div>
@@ -152,6 +152,13 @@
     <!-- Backup -->
     <section id="tela-backup" class="tela" hidden>
       <div class="cartao">
+        <h2>Exportar para outro app</h2>
+        <p class="fraco">Gera um <b>.zip sem senhas</b> com todos os cadastros: planilha (CSV), arquivo JSON e todas as fotos (imagem da câmera e foto da instalação).</p>
+        <form id="form-zip">
+          <button id="zip-botao" class="principal">Exportar ZIP (sem senhas)</button>
+        </form>
+      </div>
+      <div class="cartao">
         <h2>Fazer backup</h2>
         <p class="fraco">Gera um arquivo com todos os dispositivos, fotos e senhas, protegido pela senha que você escolher. Guarde no Drive, WhatsApp ou e-mail.</p>
         <form id="form-exportar">
@@ -194,6 +201,8 @@
 <script src="/scanner.js"></script>
 <script src="/dispositivos.js"></script>
 <script src="/backup.js"></script>
+<script src="/zip.js"></script>
+<script src="/exportar.js"></script>
 <script src="/inicio.js"></script>
 </body>
 </html>
