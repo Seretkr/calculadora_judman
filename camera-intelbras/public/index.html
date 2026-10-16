@@ -13,7 +13,8 @@
 </head>
 <body>
 <header class="topo">
-  <div class="marca"><img src="/icone.svg" alt="" width="28" height="28"> Olho Intelbras</div>
+  <button id="voltar-topo" class="link voltar" hidden aria-label="Voltar">‹ Voltar</button>
+  <div class="marca" id="marca"><img src="/icone.svg" alt="" width="28" height="28"> <span id="titulo-topo">Olho Intelbras</span></div>
   <button id="sair" class="link" hidden>Sair</button>
 </header>
 
@@ -28,29 +29,155 @@
     </form>
   </section>
 
-  <section id="tela-app" hidden>
-    <form id="form-teste" class="cartao">
-      <label>IP da câmera ou do gravador
-        <input id="ip" inputmode="decimal" autocomplete="off" placeholder="192.168.1.108" required pattern="[0-9.]+">
-      </label>
-      <div id="recentes" class="recentes"></div>
-      <div class="duas">
-        <label>Usuário <input id="usuario" value="admin" autocomplete="username" autocapitalize="none"></label>
-        <label>Senha <input id="senha" type="password" autocomplete="current-password"></label>
-      </div>
-      <details>
-        <summary>Portas</summary>
+  <div id="tela-app" hidden>
+    <!-- Testar um IP -->
+    <section id="aba-testar" class="aba">
+      <form id="form-teste" class="cartao">
+        <label>IP da câmera ou do gravador
+          <input id="ip" inputmode="decimal" autocomplete="off" placeholder="192.168.1.108" required pattern="[0-9.]+">
+        </label>
+        <div id="recentes" class="recentes"></div>
         <div class="duas">
-          <label>Web (HTTP) <input id="porta-http" inputmode="numeric" value="80"></label>
-          <label>Vídeo (RTSP) <input id="porta-rtsp" inputmode="numeric" value="554"></label>
+          <label>Usuário <input id="usuario" value="admin" autocomplete="username" autocapitalize="none"></label>
+          <label>Senha <input id="senha" type="password" autocomplete="current-password"></label>
         </div>
-      </details>
-      <button id="testar" class="principal">Testar conexão</button>
-    </form>
+        <details>
+          <summary>Portas</summary>
+          <div class="duas">
+            <label>Web (HTTP) <input id="porta-http" inputmode="numeric" value="80"></label>
+            <label>Vídeo (RTSP) <input id="porta-rtsp" inputmode="numeric" value="554"></label>
+          </div>
+        </details>
+        <button id="testar" class="principal">Testar conexão</button>
+      </form>
+      <section id="resultado" aria-live="polite"></section>
+    </section>
 
-    <section id="resultado" aria-live="polite"></section>
-  </section>
+    <!-- Scanner de faixa de IP -->
+    <section id="aba-scanner" class="aba" hidden>
+      <form id="form-scanner" class="cartao">
+        <div class="duas">
+          <label>IP inicial <input id="sc-inicio" inputmode="decimal" autocomplete="off" placeholder="192.168.1.1" required></label>
+          <label>IP final <input id="sc-fim" inputmode="decimal" autocomplete="off" placeholder="192.168.1.254" required></label>
+        </div>
+        <div class="duas">
+          <label>Usuário <input id="sc-usuario" value="admin" autocapitalize="none" autocomplete="off"></label>
+          <label>Senha <input id="sc-senha" type="password" autocomplete="off"></label>
+        </div>
+        <details>
+          <summary>Porta web</summary>
+          <label>Web (HTTP) <input id="sc-porta-http" inputmode="numeric" value="80"></label>
+        </details>
+        <button id="sc-botao" class="principal">Escanear</button>
+        <div id="sc-progresso" class="progresso" hidden><div></div></div>
+        <p id="sc-status" class="fraco pequeno" aria-live="polite"></p>
+      </form>
+      <div id="sc-barra" class="barra-canais" hidden>
+        <div class="segmento" role="tablist">
+          <button type="button" data-vista="lista" class="ativo">Lista</button>
+          <button type="button" data-vista="mosaico">Mosaico</button>
+        </div>
+        <button type="button" id="sc-atualizar">Atualizar imagens</button>
+      </div>
+      <div id="sc-lista"></div>
+    </section>
+
+    <!-- Meus dispositivos -->
+    <section id="aba-dispositivos" class="aba" hidden>
+      <div class="cartao ferramentas">
+        <input id="busca" type="search" placeholder="Buscar por nome, IP ou local" autocomplete="off">
+        <div class="botoes">
+          <button type="button" id="novo" class="principal pequeno">+ Novo</button>
+          <button type="button" id="testar-todos">Testar todos</button>
+          <button type="button" id="mosaico-todos">Mosaico</button>
+          <button type="button" id="backup">Backup</button>
+        </div>
+        <p id="disp-status" class="fraco pequeno" aria-live="polite"></p>
+      </div>
+      <div id="lista-dispositivos"></div>
+    </section>
+
+    <!-- Detalhe de um dispositivo -->
+    <section id="tela-detalhe" class="tela" hidden></section>
+
+    <!-- Cadastro / edição -->
+    <section id="tela-form" class="tela" hidden>
+      <form id="form-disp" class="cartao">
+        <label>Nome * <input id="d-nome" required maxlength="80" placeholder="Ex.: Portão da frente"></label>
+        <label>Local <input id="d-local" maxlength="120" placeholder="Ex.: Loja Centro, fachada"></label>
+        <label>IP * <input id="d-ip" inputmode="decimal" required autocomplete="off"></label>
+        <div class="duas">
+          <label>Usuário <input id="d-usuario" value="admin" autocapitalize="none" autocomplete="off"></label>
+          <label>Senha <input id="d-senha" type="password" autocomplete="new-password"></label>
+        </div>
+        <p id="d-senha-dica" class="fraco pequeno" hidden>Deixe a senha em branco para manter a atual.</p>
+        <details>
+          <summary>Portas</summary>
+          <div class="duas">
+            <label>Web (HTTP) <input id="d-porta-http" inputmode="numeric" value="80"></label>
+            <label>Vídeo (RTSP) <input id="d-porta-rtsp" inputmode="numeric" value="554"></label>
+          </div>
+        </details>
+
+        <div class="fotos">
+          <figure>
+            <div class="foto-vazia" id="d-img-cam">Sem imagem</div>
+            <figcaption>Imagem da câmera</figcaption>
+            <button type="button" id="d-capturar">Capturar agora</button>
+          </figure>
+          <figure>
+            <div class="foto-vazia" id="d-img-inst">Sem foto</div>
+            <figcaption>Foto da instalação</figcaption>
+            <label class="botao-arquivo">Tirar foto<input id="d-foto" type="file" accept="image/*" capture="environment"></label>
+            <label class="botao-arquivo link">Da galeria<input id="d-galeria" type="file" accept="image/*"></label>
+          </figure>
+        </div>
+        <p id="d-info" class="fraco pequeno"></p>
+
+        <label>Observações <textarea id="d-obs" rows="3" maxlength="1000" placeholder="Ex.: altura 3 m, PoE do switch 2, porta 5"></textarea></label>
+        <button id="d-salvar" class="principal">Salvar</button>
+        <p id="d-erro" class="erro" role="alert"></p>
+      </form>
+    </section>
+
+    <!-- Mosaico de imagens -->
+    <section id="tela-mosaico" class="tela" hidden>
+      <div class="barra-canais">
+        <h2 id="mosaico-titulo">Mosaico</h2>
+        <button type="button" id="mosaico-atualizar">Atualizar</button>
+      </div>
+      <div id="mosaico-grade" class="grade"></div>
+    </section>
+
+    <!-- Backup -->
+    <section id="tela-backup" class="tela" hidden>
+      <div class="cartao">
+        <h2>Fazer backup</h2>
+        <p class="fraco">Gera um arquivo com todos os dispositivos, fotos e senhas, protegido pela senha que você escolher. Guarde no Drive, WhatsApp ou e-mail.</p>
+        <form id="form-exportar">
+          <label>Senha do backup <input id="bk-senha" type="password" minlength="6" required autocomplete="new-password"></label>
+          <button class="principal">Gerar backup</button>
+        </form>
+      </div>
+      <div class="cartao">
+        <h2>Restaurar</h2>
+        <p class="fraco">Junta os dispositivos do arquivo com os que já estão no celular (mesmo IP é atualizado).</p>
+        <form id="form-importar">
+          <label>Arquivo de backup <input id="bk-arquivo" type="file" accept=".olho,application/octet-stream,application/json" required></label>
+          <label>Senha do backup <input id="bk-senha-2" type="password" required autocomplete="off"></label>
+          <button class="principal">Restaurar</button>
+        </form>
+      </div>
+      <p id="bk-status" class="fraco" aria-live="polite"></p>
+    </section>
+  </div>
 </main>
+
+<nav id="abas" class="abas" hidden>
+  <button type="button" data-aba="testar" class="ativo"><span aria-hidden="true">⌕</span>Testar</button>
+  <button type="button" data-aba="scanner"><span aria-hidden="true">⟟</span>Scanner</button>
+  <button type="button" data-aba="dispositivos"><span aria-hidden="true">▦</span>Dispositivos</button>
+</nav>
 
 <dialog id="visor">
   <img id="visor-img" alt="">
@@ -61,6 +188,12 @@
   </div>
 </dialog>
 
+<script src="/nucleo.js"></script>
+<script src="/banco.js"></script>
 <script src="/app.js"></script>
+<script src="/scanner.js"></script>
+<script src="/dispositivos.js"></script>
+<script src="/backup.js"></script>
+<script src="/inicio.js"></script>
 </body>
 </html>

@@ -8,6 +8,14 @@ Cole o IP de um aparelho Intelbras da rede e veja na hora:
 
 Funciona no celular. Toque numa imagem para abrir em tela cheia.
 
+No app Android há também:
+
+- **Scanner:** varre uma faixa de IP (até 1.024 de uma vez) com usuário e senha, como o IP Utility da Intelbras. Lista câmeras e gravadores com modelo, nome, MAC e situação (funcionando ou senha recusada). Em cada um dá para **ver a imagem** e **cadastrar**. No **Mosaico**, aparece a imagem de todos em sequência de IP.
+- **Dispositivos:** cadastro com nome, local, IP, usuário, senha e observações. Guarda a **imagem da câmera capturada na hora do cadastro** e a **foto da instalação** tirada com a câmera do celular. Tem busca, "Testar todos" e "Mosaico" com a imagem ao vivo de todos (gravadores mostram todos os canais).
+- **Backup:** gera um arquivo `.olho` com dispositivos, fotos e senhas, cifrado com a senha que você escolher (AES-256-GCM, PBKDF2 com 310 mil rodadas). Guarde no Drive ou no WhatsApp. Use antes de desinstalar o app: os dados somem junto.
+
+No cadastro, a senha da câmera é cifrada com uma chave do **Android Keystore**, que não sai do aparelho. Fotos e cadastros ficam só no celular.
+
 Há duas formas de usar:
 
 | Forma | Precisa de computador? |

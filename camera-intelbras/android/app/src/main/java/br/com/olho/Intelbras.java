@@ -101,10 +101,14 @@ final class Intelbras {
     // ---------- rede ----------
 
     private static JSONObject tcp(String ip, int porta, String nome) throws JSONException {
+        return tcp(ip, porta, nome, TEMPO);
+    }
+
+    private static JSONObject tcp(String ip, int porta, String nome, int tempo) throws JSONException {
         long t0 = System.currentTimeMillis();
         JSONObject r = new JSONObject().put("porta", porta).put("nome", nome);
         try (Socket s = new Socket()) {
-            s.connect(new InetSocketAddress(ip, porta), TEMPO);
+            s.connect(new InetSocketAddress(ip, porta), tempo);
             r.put("ok", true);
         } catch (Exception e) {
             r.put("ok", false).put("erro", traduz(e));
@@ -216,6 +220,51 @@ final class Intelbras {
         return o;
     }
 
+    private static String mac(Cam c) {
+        Resposta r = get(c, "/cgi-bin/configManager.cgi?action=getConfig&name=Network");
+        if (r.status != 200) return "";
+        for (Map.Entry<String, String> e : chaves(r.texto()).entrySet()) {
+            if (e.getKey().endsWith(".PhysicalAddress") && !e.getValue().isEmpty()) return e.getValue().toUpperCase(Locale.ROOT);
+        }
+        return "";
+    }
+
+    private static int contarCanais(Cam c) {
+        Resposta r = get(c, "/cgi-bin/configManager.cgi?action=getConfig&name=ChannelTitle");
+        if (r.status != 200) return 1;
+        int n = 0;
+        for (String k : chaves(r.texto()).keySet()) if (k.matches(".*ChannelTitle\\[\\d+\\]\\.Name$")) n++;
+        return Math.max(n, 1);
+    }
+
+    private static boolean ehGravador(String classe, String modelo) {
+        return Pattern.compile("DVR|NVR|XVR|HCVR|MHDX|NVD|IVR")
+                .matcher(classe.toUpperCase(Locale.ROOT) + " " + modelo.toUpperCase(Locale.ROOT)).find();
+    }
+
+    // Versão rápida da consulta, usada pelo scanner. Devolve null se o IP não parece um aparelho Intelbras.
+    static JSONObject identificar(Cam c) throws Exception {
+        Future<JSONObject> fWeb = PORTAS.submit(() -> tcp(c.ip, c.portaHttp, "Web (HTTP)", 800));
+        Future<JSONObject> fSrv = PORTAS.submit(() -> tcp(c.ip, 37777, "Serviço Intelbras", 800));
+        boolean web = fWeb.get().getBoolean("ok"), srv = fSrv.get().getBoolean("ok");
+        if (!web && !srv) return null;
+        JSONObject r = new JSONObject().put("ip", c.ip).put("modelo", "").put("tipo", "Intelbras").put("nome", "");
+        if (!web) return r.put("situacao", "semweb");
+        Resposta tipo = get(c, "/cgi-bin/magicBox.cgi?action=getDeviceType");
+        if (tipo.status == 401) return srv ? r.put("situacao", "senha") : null;
+        if (tipo.status != 200) return srv ? r.put("situacao", "desconhecido") : null;
+        Map<String, String> t = chaves(tipo.texto());
+        Resposta classe = get(c, "/cgi-bin/magicBox.cgi?action=getDeviceClass");
+        Resposta nomeAp = get(c, "/cgi-bin/magicBox.cgi?action=getMachineName");
+        String cl = classe.status == 200 ? chaves(classe.texto()).getOrDefault("class", "") : "";
+        String modelo = t.getOrDefault("type", "Intelbras");
+        boolean gravador = ehGravador(cl, modelo);
+        r.put("modelo", modelo).put("gravador", gravador).put("tipo", gravador ? "Gravador" : "Câmera")
+                .put("nome", nomeAp.status == 200 ? chaves(nomeAp.texto()).getOrDefault("name", "") : "")
+                .put("mac", mac(c)).put("canais", gravador ? contarCanais(c) : 1);
+        return r.put("situacao", "online");
+    }
+
     // ---------- RTSP ----------
 
     private static String[] pedidoRtsp(Cam c, String uri, String auth) {
@@ -319,11 +368,11 @@ final class Intelbras {
 
         String modelo = t.containsKey("type") ? t.get("type") : si.getOrDefault("deviceType", "Intelbras");
         String classeTxt = (cl.containsKey("class") ? cl.get("class") : si.getOrDefault("deviceType", "")).toUpperCase(Locale.ROOT);
-        boolean gravador = Pattern.compile("DVR|NVR|XVR|HCVR|MHDX|NVD|IVR")
-                .matcher(classeTxt + " " + modelo.toUpperCase(Locale.ROOT)).find();
+        boolean gravador = ehGravador(classeTxt, modelo);
         String nome = no.getOrDefault("name", "");
         r.put("modelo", modelo).put("nome", nome).put("serie", si.getOrDefault("serialNumber", ""))
-                .put("gravador", gravador).put("tipo", gravador ? "Gravador" : "Câmera").put("webMs", tipo.ms);
+                .put("gravador", gravador).put("tipo", gravador ? "Gravador" : "Câmera").put("webMs", tipo.ms)
+                .put("mac", mac(c));
 
         // Canais: o nome de cada um vem da configuração ChannelTitle.
         List<JSONObject> canais = new ArrayList<>();

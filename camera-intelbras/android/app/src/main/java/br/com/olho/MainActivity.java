@@ -2,36 +2,63 @@ package br.com.olho;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.MediaStore;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
+import android.util.Base64;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import androidx.core.content.FileProvider;
+
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
 
 // Tela do app: a mesma página da versão para computador, servida de dentro do APK.
 // Não abre nenhuma porta no celular; a página só fala com o código Java abaixo.
 public class MainActivity extends Activity {
     private static final String HOST = "olho.local";
-    private static final long CONSULTA_MS = 10 * 60 * 1000; // credencial da câmera fica 10 min na memória
+    private static final long CONSULTA_MS = 30 * 60 * 1000; // credencial da câmera fica 30 min na memória
+    private static final int MAX_IPS = 1024;
+    private static final int PEDIDO_FOTO = 7;
+    private static final String CHAVE = "olho-senhas";
     private static final Pattern ARQUIVO = Pattern.compile("^/([\\w-]+\\.(html|js|css|svg|webmanifest|png))$");
     private static final Pattern IMAGEM = Pattern.compile("^/api/imagem/([a-f0-9]{48})/(\\d{1,3})$");
     private static final String CSP = "default-src 'self'; img-src 'self' blob: data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
@@ -43,8 +70,11 @@ public class MainActivity extends Activity {
     }
 
     private final Map<String, Consulta> consultas = new ConcurrentHashMap<>();
+    private final Map<Integer, AtomicBoolean> varreduras = new ConcurrentHashMap<>();
     private final ExecutorService exec = Executors.newCachedThreadPool();
     private WebView web;
+    private ValueCallback<Uri[]> retornoFoto;
+    private Uri fotoCamera;
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -70,6 +100,12 @@ public class MainActivity extends Activity {
                 return responder(req.getUrl());
             }
         });
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> retorno, FileChooserParams p) {
+                return escolherFoto(retorno, p);
+            }
+        });
         if (salvo != null) web.restoreState(salvo); else web.loadUrl("https://" + HOST + "/");
     }
 
@@ -82,10 +118,75 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         consultas.clear();
+        for (AtomicBoolean p : varreduras.values()) p.set(true);
         exec.shutdownNow();
         web.destroy();
         super.onDestroy();
     }
+
+    // Botão voltar: a página fecha a tela aberta; se não houver nada aberto, sai do app.
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onBackPressed() {
+        web.evaluateJavascript("window.voltar ? window.voltar() : false", (r) -> {
+            if (!"true".equals(r)) MainActivity.super.onBackPressed();
+        });
+    }
+
+    // ---------- foto da instalação ----------
+
+    private boolean escolherFoto(ValueCallback<Uri[]> retorno, WebChromeClient.FileChooserParams p) {
+        if (retornoFoto != null) retornoFoto.onReceiveValue(null);
+        retornoFoto = retorno;
+        fotoCamera = null;
+        Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        try {
+            File pasta = new File(getCacheDir(), "fotos");
+            if (!pasta.isDirectory() && !pasta.mkdirs()) throw new IOException("sem pasta");
+            File f = File.createTempFile("instalacao", ".jpg", pasta);
+            fotoCamera = FileProvider.getUriForFile(this, getPackageName() + ".arquivos", f);
+            camera.putExtra(MediaStore.EXTRA_OUTPUT, fotoCamera);
+            camera.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (Exception e) {
+            camera = null;
+        }
+        boolean imagem = false;
+        for (String t : p.getAcceptTypes()) if (t != null && t.startsWith("image")) imagem = true;
+        if (!imagem) camera = null; // arquivo de backup: só o seletor de arquivos
+        Intent galeria = new Intent(Intent.ACTION_GET_CONTENT).setType(imagem ? "image/*" : "*/*").addCategory(Intent.CATEGORY_OPENABLE);
+        Intent abrir;
+        if (p.isCaptureEnabled() && camera != null) {
+            abrir = camera;
+        } else {
+            abrir = Intent.createChooser(galeria, imagem ? "Foto da instalação" : "Arquivo de backup");
+            if (camera != null) abrir.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{camera});
+        }
+        try {
+            startActivityForResult(abrir, PEDIDO_FOTO);
+            return true;
+        } catch (ActivityNotFoundException e) {
+            retornoFoto = null;
+            return false;
+        }
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected void onActivityResult(int pedido, int resultado, Intent dados) {
+        if (pedido != PEDIDO_FOTO || retornoFoto == null) {
+            super.onActivityResult(pedido, resultado, dados);
+            return;
+        }
+        Uri[] r = null;
+        if (resultado == RESULT_OK) {
+            if (dados != null && dados.getData() != null) r = new Uri[]{dados.getData()};
+            else if (fotoCamera != null) r = new Uri[]{fotoCamera};
+        }
+        retornoFoto.onReceiveValue(r);
+        retornoFoto = null;
+    }
+
+    // ---------- arquivos da página e imagens das câmeras ----------
 
     private WebResourceResponse resposta(int status, String tipo, byte[] corpo) {
         Map<String, String> h = new HashMap<>();
@@ -149,6 +250,45 @@ public class MainActivity extends Activity {
         }
     }
 
+    private String registrar(Intelbras.Cam cam) {
+        String t = Intelbras.token();
+        consultas.put(t, new Consulta(cam));
+        return t;
+    }
+
+    // ---------- senhas cifradas com chave do Android Keystore (não sai do aparelho) ----------
+
+    private static SecretKey chave() throws Exception {
+        KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
+        ks.load(null);
+        if (!ks.containsAlias(CHAVE)) {
+            KeyGenerator kg = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
+            kg.init(new KeyGenParameterSpec.Builder(CHAVE, KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .setKeySize(256)
+                    .build());
+            return kg.generateKey();
+        }
+        return ((KeyStore.SecretKeyEntry) ks.getEntry(CHAVE, null)).getSecretKey();
+    }
+
+    private static String cifrar(String texto) throws Exception {
+        Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+        c.init(Cipher.ENCRYPT_MODE, chave());
+        byte[] ct = c.doFinal(texto.getBytes(StandardCharsets.UTF_8));
+        return Base64.encodeToString(c.getIV(), Base64.NO_WRAP) + ":" + Base64.encodeToString(ct, Base64.NO_WRAP);
+    }
+
+    private static String decifrar(String cifrado) throws Exception {
+        String[] p = cifrado.split(":");
+        Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+        c.init(Cipher.DECRYPT_MODE, chave(), new GCMParameterSpec(128, Base64.decode(p[0], Base64.NO_WRAP)));
+        return new String(c.doFinal(Base64.decode(p[1], Base64.NO_WRAP)), StandardCharsets.UTF_8);
+    }
+
+    // ---------- auxiliares ----------
+
     private static int porta(String v, int padrao) {
         try {
             int n = v == null || v.trim().isEmpty() ? padrao : Integer.parseInt(v.trim());
@@ -158,44 +298,198 @@ public class MainActivity extends Activity {
         }
     }
 
-    // Chamado pelo app.js: window.Olho.consultar(id, json). A resposta volta por window.__olho(id, json).
+    private static long numero(String ip) {
+        long n = 0;
+        for (String p : ip.split("\\.")) n = n * 256 + Long.parseLong(p);
+        return n;
+    }
+
+    private static String ip(long n) {
+        return ((n >> 24) & 255) + "." + ((n >> 16) & 255) + "." + ((n >> 8) & 255) + "." + (n & 255);
+    }
+
+    private static String limitar(String s, int max) {
+        return s.length() > max ? s.substring(0, max) : s;
+    }
+
+    // Lê usuário/senha/portas do pedido da página. A senha pode vir pura ou cifrada (dispositivo cadastrado).
+    private static Intelbras.Cam lerCam(JSONObject b, String ip) throws Exception {
+        Intelbras.Cam cam = new Intelbras.Cam();
+        cam.ip = ip;
+        cam.usuario = limitar(b.optString("usuario", "admin").trim(), 64);
+        if (cam.usuario.isEmpty()) cam.usuario = "admin";
+        String cifrada = b.optString("senhaCifrada", "");
+        cam.senha = limitar(cifrada.isEmpty() ? b.optString("senha", "") : decifrar(cifrada), 128);
+        cam.portaHttp = porta(b.optString("portaHttp"), 80);
+        cam.portaRtsp = porta(b.optString("portaRtsp"), 554);
+        return cam;
+    }
+
+    private void js(String funcao, int id, JSONObject r) {
+        final String codigo = "window." + funcao + "(" + id + "," + JSONObject.quote(r.toString()) + ")";
+        web.post(() -> web.evaluateJavascript(codigo, null));
+    }
+
+    private static JSONObject erro(String msg) {
+        JSONObject r = new JSONObject();
+        try { r.put("erro", msg); } catch (Exception ignorado) { /* sem saída */ }
+        return r;
+    }
+
+    // ---------- ponte com a página (app.js) ----------
+
     private final class Ponte {
+        // window.Olho.consultar(id, json): teste completo. A resposta volta por window.__olho(id, json).
         @JavascriptInterface
         public void consultar(final int id, final String json) {
             exec.execute(() -> {
                 JSONObject r;
                 try {
                     JSONObject b = new JSONObject(json);
-                    Intelbras.Cam cam = new Intelbras.Cam();
-                    cam.ip = b.optString("ip", "").trim();
-                    cam.usuario = limitar(b.optString("usuario", "admin"), 64);
-                    cam.senha = limitar(b.optString("senha", ""), 128);
-                    cam.portaHttp = porta(b.optString("portaHttp"), 80);
-                    cam.portaRtsp = porta(b.optString("portaRtsp"), 554);
-                    if (cam.usuario.isEmpty()) cam.usuario = "admin";
-                    if (!Intelbras.ipInterno(cam.ip)) {
-                        r = new JSONObject().put("erro", "Use um IP da rede interna (ex.: 192.168.1.108).");
-                    } else if (cam.portaHttp < 0 || cam.portaRtsp < 0) {
-                        r = new JSONObject().put("erro", "Porta inválida.");
+                    String ip = b.optString("ip", "").trim();
+                    if (!Intelbras.ipInterno(ip)) {
+                        r = erro("Use um IP da rede interna (ex.: 192.168.1.108).");
                     } else {
-                        r = Intelbras.consultar(cam);
-                        if (r.has("canais")) {
-                            String t = Intelbras.token();
-                            consultas.put(t, new Consulta(cam));
-                            r.put("token", t);
+                        Intelbras.Cam cam = lerCam(b, ip);
+                        if (cam.portaHttp < 0 || cam.portaRtsp < 0) {
+                            r = erro("Porta inválida.");
+                        } else {
+                            r = Intelbras.consultar(cam);
+                            if (r.has("canais")) r.put("token", registrar(cam));
                         }
                     }
                 } catch (Exception e) {
-                    r = new JSONObject();
-                    try { r.put("erro", "Falha no teste: " + e.getMessage()); } catch (Exception ignorado) { /* sem saída */ }
+                    r = erro("Falha no teste: " + e.getMessage());
                 }
-                final String js = "window.__olho(" + id + "," + JSONObject.quote(r.toString()) + ")";
-                web.post(() -> web.evaluateJavascript(js, null));
+                js("__olho", id, r);
             });
         }
 
-        private String limitar(String s, int max) {
-            return s.length() > max ? s.substring(0, max) : s;
+        // Scanner: cada aparelho achado chega por window.__olhoEvento(id, json); o fim por window.__olho(id, json).
+        @JavascriptInterface
+        public void varrer(final int id, final String json) {
+            final AtomicBoolean parar = new AtomicBoolean();
+            varreduras.put(id, parar);
+            exec.execute(() -> {
+                try {
+                    JSONObject b = new JSONObject(json);
+                    String ini = b.optString("inicio", "").trim(), fim = b.optString("fim", "").trim();
+                    if (!Intelbras.ipInterno(ini) || !Intelbras.ipInterno(fim)) {
+                        js("__olho", id, erro("Use IPs da rede interna (ex.: 192.168.1.1 até 192.168.1.254)."));
+                        return;
+                    }
+                    final long a = numero(ini), z = numero(fim);
+                    if (z < a) { js("__olho", id, erro("O IP final precisa ser maior que o inicial.")); return; }
+                    if (z - a + 1 > MAX_IPS) { js("__olho", id, erro("Faixa grande demais: no máximo " + MAX_IPS + " IPs por vez.")); return; }
+                    final Intelbras.Cam modelo = lerCam(b, ini);
+                    if (modelo.portaHttp < 0) { js("__olho", id, erro("Porta inválida.")); return; }
+                    final int total = (int) (z - a + 1);
+                    final AtomicInteger feitos = new AtomicInteger(), achados = new AtomicInteger();
+                    ExecutorService pool = Executors.newFixedThreadPool(32);
+                    for (long n = a; n <= z; n++) {
+                        final String alvo = ip(n);
+                        pool.execute(() -> {
+                            try {
+                                if (parar.get() || !Intelbras.ipInterno(alvo)) return;
+                                Intelbras.Cam cam = new Intelbras.Cam();
+                                cam.ip = alvo;
+                                cam.usuario = modelo.usuario;
+                                cam.senha = modelo.senha;
+                                cam.portaHttp = modelo.portaHttp;
+                                cam.portaRtsp = modelo.portaRtsp;
+                                JSONObject r = Intelbras.identificar(cam);
+                                if (r != null && !parar.get()) {
+                                    if ("online".equals(r.optString("situacao"))) r.put("token", registrar(cam));
+                                    achados.incrementAndGet();
+                                    js("__olhoEvento", id, new JSONObject().put("achou", r));
+                                }
+                            } catch (Exception ignorado) {
+                                // IP com problema não interrompe a varredura
+                            } finally {
+                                int f = feitos.incrementAndGet();
+                                if (f % 8 == 0 || f == total) {
+                                    try { js("__olhoEvento", id, new JSONObject().put("feitos", f).put("total", total)); } catch (Exception ignorado) { /* sem saída */ }
+                                }
+                            }
+                        });
+                    }
+                    pool.shutdown();
+                    pool.awaitTermination(15, TimeUnit.MINUTES);
+                    js("__olho", id, new JSONObject().put("fim", true).put("total", total)
+                            .put("achados", achados.get()).put("parado", parar.get()));
+                } catch (Exception e) {
+                    js("__olho", id, erro("Falha na varredura: " + e.getMessage()));
+                } finally {
+                    varreduras.remove(id);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void parar(int id) {
+            AtomicBoolean p = varreduras.get(id);
+            if (p != null) p.set(true);
+        }
+
+        // Cifra a senha da câmera antes de ir para o cadastro (a página nunca guarda a senha pura).
+        @JavascriptInterface
+        public String cifrar(String senha) {
+            try {
+                return MainActivity.cifrar(limitar(senha, 128));
+            } catch (Exception e) {
+                return "";
+            }
+        }
+
+        // Só para o backup: a página cifra de novo com a senha do backup antes de sair do app.
+        @JavascriptInterface
+        public String decifrar(String cifrada) {
+            try {
+                return MainActivity.decifrar(cifrada);
+            } catch (Exception e) {
+                return "";
+            }
+        }
+
+        // Entrega o arquivo de backup para o Android (Drive, WhatsApp, Arquivos...).
+        @JavascriptInterface
+        public void compartilhar(String nome, String conteudo) {
+            try {
+                File pasta = new File(getCacheDir(), "fotos");
+                if (!pasta.isDirectory() && !pasta.mkdirs()) return;
+                File f = new File(pasta, nome.replaceAll("[^\\w.-]", "_"));
+                try (java.io.FileOutputStream out = new java.io.FileOutputStream(f)) {
+                    out.write(conteudo.getBytes(StandardCharsets.UTF_8));
+                }
+                Uri u = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".arquivos", f);
+                Intent envio = new Intent(Intent.ACTION_SEND).setType("application/octet-stream")
+                        .putExtra(Intent.EXTRA_STREAM, u).putExtra(Intent.EXTRA_SUBJECT, nome)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                runOnUiThread(() -> startActivity(Intent.createChooser(envio, "Guardar backup")));
+            } catch (Exception ignorado) {
+                // sem app para receber o arquivo
+            }
+        }
+
+        // IP do celular no Wi-Fi, para sugerir a faixa do scanner.
+        @JavascriptInterface
+        public String meuIp() {
+            try {
+                String achado = "";
+                for (NetworkInterface i : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                    if (!i.isUp() || i.isLoopback()) continue;
+                    for (InetAddress e : Collections.list(i.getInetAddresses())) {
+                        String s = e.getHostAddress();
+                        if (e instanceof Inet4Address && s != null && Intelbras.ipInterno(s)) {
+                            if (i.getName().startsWith("wlan")) return s;
+                            if (achado.isEmpty()) achado = s;
+                        }
+                    }
+                }
+                return achado;
+            } catch (Exception e) {
+                return "";
+            }
         }
     }
 }

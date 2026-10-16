@@ -1,57 +1,9 @@
 'use strict';
-// Tela do Olho Intelbras. Tudo que vem do aparelho entra como texto (textContent), nunca como HTML.
+// Aba "Testar": cola o IP e mostra se é câmera (imagem) ou gravador (todos os canais).
 
-const $ = (id) => document.getElementById(id);
 const RECENTES = 'olho-recentes'; // só IP e usuário; senha nunca é guardada
-const NATIVO = window.Olho; // existe quando a página roda dentro do app Android
 
-function el(tag, attrs = {}, ...filhos) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === 'class') e.className = v;
-    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
-    else e.setAttribute(k, v);
-  }
-  for (const f of filhos) if (f != null) e.append(f);
-  return e;
-}
-
-// No app Android não há servidor: a consulta vai direto para o código Java do celular.
-let seq = 0;
-const pendentes = new Map();
-window.__olho = (id, json) => {
-  const f = pendentes.get(id);
-  pendentes.delete(id);
-  if (f) f(JSON.parse(json));
-};
-
-function apiNativa(caminho, corpo) {
-  if (caminho !== '/api/consultar') return Promise.resolve({ ok: true, status: 200, dados: {} });
-  return new Promise((res) => {
-    const id = ++seq;
-    pendentes.set(id, (d) => res({ ok: !d.erro, status: d.erro ? 400 : 200, dados: d }));
-    NATIVO.consultar(id, JSON.stringify(corpo));
-  });
-}
-
-async function api(caminho, corpo) {
-  if (NATIVO) return apiNativa(caminho, corpo);
-  const r = await fetch(caminho, corpo === undefined ? {} : {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
-  });
-  const dados = await r.json().catch(() => ({}));
-  if (r.status === 401 && caminho !== '/api/entrar') mostrar('entrar');
-  return { ok: r.ok, status: r.status, dados };
-}
-
-function mostrar(tela) {
-  $('tela-entrar').hidden = tela !== 'entrar';
-  $('tela-app').hidden = tela !== 'app';
-  $('sair').hidden = tela !== 'app' || !!NATIVO;
-  if (tela === 'entrar') $('senha-app').focus();
-}
-
-// ---------- entrar / sair ----------
+// ---------- entrar / sair (só na versão com servidor) ----------
 
 $('form-entrar').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -90,111 +42,79 @@ function desenharRecentes() {
 }
 
 // Aceita colar coisas como "http://192.168.1.108/" ou "rtsp://admin@192.168.1.108:554/..."
-$('ip').addEventListener('paste', () => setTimeout(() => {
-  const m = $('ip').value.match(/(\d{1,3}(?:\.\d{1,3}){3})/);
-  if (m) $('ip').value = m[1];
-}, 0));
+function soIp(campo) {
+  campo.addEventListener('paste', () => setTimeout(() => {
+    const m = campo.value.match(/(\d{1,3}(?:\.\d{1,3}){3})/);
+    if (m) campo.value = m[1];
+  }, 0));
+}
+soIp($('ip'));
 
 // ---------- teste ----------
 
-let consulta = null;
-
 $('form-teste').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const ip = $('ip').value.trim();
+  const pedido = {
+    ip: $('ip').value.trim(), usuario: $('usuario').value.trim(), senha: $('senha').value,
+    portaHttp: $('porta-http').value, portaRtsp: $('porta-rtsp').value,
+  };
   const botao = $('testar');
   botao.disabled = true;
   botao.textContent = 'Testando…';
-  $('resultado').replaceChildren(el('p', { class: 'carregando' }, `Procurando ${ip} na rede…`));
+  $('resultado').replaceChildren(el('p', { class: 'carregando' }, `Procurando ${pedido.ip} na rede…`));
   try {
-    const r = await api('/api/consultar', {
-      ip, usuario: $('usuario').value.trim(), senha: $('senha').value,
-      portaHttp: $('porta-http').value, portaRtsp: $('porta-rtsp').value,
-    });
+    const r = await api('/api/consultar', pedido);
     if (!r.ok) {
       $('resultado').replaceChildren(el('div', { class: 'cartao' }, el('p', { class: 'erro' }, r.dados.erro || 'Falha no teste.')));
       return;
     }
-    guardarRecente(ip, $('usuario').value.trim());
-    desenharResultado(r.dados);
+    guardarRecente(pedido.ip, pedido.usuario);
+    desenharResultado(r.dados, $('resultado'), {
+      cadastrar: NATIVO ? () => abrirCadastro(null, { ...pedido, consulta: r.dados }) : null,
+    });
   } catch {
-    $('resultado').replaceChildren(el('div', { class: 'cartao' }, el('p', { class: 'erro' }, NATIVO ? 'Falha no teste.' : 'Sem contato com o servidor do app.')));
+    $('resultado').replaceChildren(el('div', { class: 'cartao' },
+      el('p', { class: 'erro' }, NATIVO ? 'Falha no teste.' : 'Sem contato com o servidor do app.')));
   } finally {
     botao.disabled = false;
     botao.textContent = 'Testar conexão';
   }
 });
 
-const ROTULO = { online: 'Funcionando', atencao: 'Atenção', senha: 'Senha recusada', offline: 'Sem conexão' };
-
-function desenharResultado(r) {
-  consulta = r;
+// Desenha o resultado de uma consulta. Usado na aba Testar e no detalhe do dispositivo.
+function desenharResultado(r, destino, { cadastrar, titulo } = {}) {
   const info = el('dl', { class: 'info' });
   const linha = (k, v) => { if (v) info.append(el('dt', {}, k), el('dd', {}, String(v))); };
   linha('Tipo', r.tipo);
   linha('Modelo', r.modelo);
   linha('Nome', r.nome);
   linha('Nº de série', r.serie);
+  linha('MAC', r.mac);
   if (r.rtsp && r.rtsp.ok) linha('Vídeo', `${r.rtsp.codec} · ${r.rtsp.ms} ms`);
   if (r.rtsp && r.rtsp.ok) linha('Link RTSP', r.rtsp.url);
   linha('Testado em', new Date(r.quando).toLocaleString('pt-BR'));
 
-  const portas = el('ul', { class: 'portas' }, ...r.portas.map((p) => el('li', {},
+  const portas = el('ul', { class: 'portas' }, ...(r.portas || []).map((p) => el('li', {},
     el('span', {}, el('span', { class: 'ponto' + (p.ok ? ' ok' : '') }), `${p.nome} · ${p.porta}`),
     el('span', { class: 'fraco' }, p.ok ? `${p.ms} ms` : p.erro))));
 
   const cartao = el('div', { class: 'cartao' },
-    el('div', { class: 'cab' }, el('h2', {}, r.ip), el('span', { class: 'selo s-' + r.situacao }, ROTULO[r.situacao] || r.situacao)),
+    el('div', { class: 'cab' }, el('h2', {}, titulo || r.ip), selo(r.situacao)),
     el('p', {}, r.diagnostico),
     info.children.length ? info : null,
     portas,
-    r.avisos && r.avisos.length ? el('ul', { class: 'avisos' }, ...r.avisos.map((a) => el('li', {}, a))) : null);
+    r.avisos && r.avisos.length ? el('ul', { class: 'avisos' }, ...r.avisos.map((a) => el('li', {}, a))) : null,
+    cadastrar && r.token ? el('button', { type: 'button', class: 'principal espaco', onclick: cadastrar }, 'Cadastrar este dispositivo') : null);
 
   const partes = [cartao];
   if (r.canais && r.token) {
-    const grade = el('div', { class: 'grade' + (r.gravador ? '' : ' unica') }, ...r.canais.map((c) => quadroCanal(r, c)));
+    const grade = el('div', { class: 'grade' + (r.gravador ? '' : ' unica') }, ...r.canais.map((c) => quadro({
+      token: r.token, canal: c.canal, titulo: c.nome || `Canal ${c.canal}`, sub: `CH ${c.canal}`, semVideo: c.semVideo,
+    })));
     partes.push(el('div', { class: 'barra-canais' },
-      el('h2', {}, r.gravador ? `Canais (${r.canais.length})` : 'Imagem'),
-      el('button', { type: 'button', onclick: () => grade.querySelectorAll('img').forEach(recarregar) }, 'Atualizar imagens')));
+      el('h2', {}, r.gravador ? `Câmeras do gravador (${r.canais.length})` : 'Imagem'),
+      el('button', { type: 'button', onclick: () => recarregarImagens(grade) }, 'Atualizar imagens')));
     partes.push(grade);
   }
-  $('resultado').replaceChildren(...partes);
+  destino.replaceChildren(...partes);
 }
-
-function urlImagem(r, canal) {
-  return `/api/imagem/${r.token}/${canal}?t=${Date.now()}`;
-}
-
-function recarregar(img) {
-  img.hidden = false;
-  img.src = urlImagem(consulta, img.dataset.canal);
-}
-
-function quadroCanal(r, c) {
-  const aviso = el('span', {}, c.semVideo ? 'Sem vídeo' : 'Carregando…');
-  const img = el('img', { alt: c.nome, loading: 'lazy', 'data-canal': String(c.canal) });
-  img.addEventListener('load', () => { aviso.textContent = ''; });
-  img.addEventListener('error', () => { img.hidden = true; aviso.textContent = c.semVideo ? 'Sem vídeo' : 'Sem imagem'; });
-  img.src = urlImagem(r, c.canal);
-  return el('button', { type: 'button', class: 'canal', onclick: () => abrirVisor(c) },
-    el('div', { class: 'quadro' }, aviso, img),
-    el('div', { class: 'legenda' }, el('b', {}, c.nome || `Canal ${c.canal}`), el('span', { class: 'fraco' }, `CH ${c.canal}`)));
-}
-
-// ---------- visor em tela cheia ----------
-
-let canalAberto = null;
-
-function abrirVisor(c) {
-  canalAberto = c;
-  $('visor-titulo').textContent = `CH ${c.canal} · ${c.nome || ''}`;
-  $('visor-img').src = urlImagem(consulta, c.canal);
-  $('visor').showModal();
-}
-$('visor-atualizar').addEventListener('click', () => { if (canalAberto) $('visor-img').src = urlImagem(consulta, canalAberto.canal); });
-$('visor-fechar').addEventListener('click', () => $('visor').close());
-
-// ---------- início ----------
-
-desenharRecentes();
-api('/api/sessao').then((r) => mostrar(r.ok ? 'app' : 'entrar')).catch(() => mostrar('entrar'));

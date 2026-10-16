@@ -27,3 +27,8 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 }
+
+dependencies {
+    // Só para entregar à câmera do celular um arquivo onde salvar a foto da instalação
+    implementation 'androidx.core:core:1.13.1'
+}
