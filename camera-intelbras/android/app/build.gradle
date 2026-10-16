@@ -1,0 +1,29 @@
+plugins {
+    id 'com.android.application'
+}
+
+// No GitHub, cada compilação ganha um número novo de versão
+def numero = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer
+
+android {
+    namespace 'br.com.olho'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'br.com.olho.intelbras'
+        minSdk 24
+        targetSdk 34
+        versionCode numero
+        versionName "1.0.${numero}"
+    }
+
+    // A tela é a mesma da versão para computador (pasta public)
+    sourceSets {
+        main { assets.srcDirs = ['../../public'] }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

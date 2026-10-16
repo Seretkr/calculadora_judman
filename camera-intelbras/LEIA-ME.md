@@ -8,11 +8,37 @@ Cole o IP de um aparelho Intelbras da rede e veja na hora:
 
 Funciona no celular. Toque numa imagem para abrir em tela cheia.
 
-## Por que precisa de um computador
+Há duas formas de usar:
 
-O navegador do celular não deixa um site falar direto com câmeras (RTSP, portas e autenticação Digest). Por isso um computador da mesma rede roda o servidor do app, e o celular só abre a página dele.
+| Forma | Precisa de computador? |
+|---|---|
+| **App Android** (recomendado) | Não. Instala no celular e fala direto com as câmeras pelo Wi-Fi. |
+| Servidor + navegador | Sim: um computador da rede roda o servidor e o celular (Android ou iPhone) abre a página dele. |
 
-## Como usar
+## App Android
+
+1. No celular, abra **https://github.com/Seretkr/calculadora_judman/releases/latest/download/olho-intelbras.apk**.
+2. Abra o arquivo baixado. Se o Android pedir, permita **instalar apps desta fonte** (Chrome ou Arquivos).
+3. Conecte o celular no **Wi-Fi da mesma rede** das câmeras e abra o **Olho Intelbras**.
+
+Como o app fica no próprio celular, não tem senha de app nem porta aberta: nada fica exposto na rede. A senha da câmera só fica na memória por 10 minutos e nunca é gravada.
+
+O APK é compilado pelo GitHub (Actions → "Olho Intelbras (Android)") a cada mudança na pasta `camera-intelbras`. Cada versão sai com uma chave de assinatura nova, então para atualizar é preciso **desinstalar a versão antiga antes**. Para atualizar sem desinstalar, crie uma chave fixa uma vez e salve em Settings → Secrets → Actions como `OLHO_KEYSTORE`:
+
+```
+keytool -genkeypair -keystore olho.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -validity 10000 -dname "CN=Olho"
+base64 -w0 olho.keystore   # cole o resultado no segredo
+```
+
+O código do app fica em `android/`. A tela é a mesma da pasta `public/`.
+
+iPhone não permite instalar app fora da App Store. No iPhone, use a forma servidor + navegador.
+
+## Servidor + navegador
+
+O navegador do celular não deixa um site falar direto com câmeras (RTSP, portas e autenticação Digest). Por isso, nesta forma, um computador da mesma rede roda o servidor do app e o celular só abre a página dele.
+
+### Como usar
 
 1. Instale o [Node.js](https://nodejs.org) 18 ou mais novo no computador que fica na rede das câmeras.
 2. Nesta pasta, rode `node servidor.js` (no Windows, também dá para dar dois cliques em `iniciar.bat`).
@@ -28,7 +54,7 @@ O navegador do celular não deixa um site falar direto com câmeras (RTSP, porta
 | Outra porta | `PORTA=9000 node servidor.js` |
 | Sem HTTPS (não recomendado) | `SEM_HTTPS=1 node servidor.js` |
 
-## Segurança
+### Segurança
 
 - O app pede **senha** para entrar. Depois de **5 erros**, aquele aparelho fica bloqueado por 15 minutos. O login vale 12 horas.
 - A senha do app é guardada só como hash (scrypt) em `config.json`.

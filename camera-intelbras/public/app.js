@@ -3,6 +3,7 @@
 
 const $ = (id) => document.getElementById(id);
 const RECENTES = 'olho-recentes'; // só IP e usuário; senha nunca é guardada
+const NATIVO = window.Olho; // existe quando a página roda dentro do app Android
 
 function el(tag, attrs = {}, ...filhos) {
   const e = document.createElement(tag);
@@ -15,7 +16,26 @@ function el(tag, attrs = {}, ...filhos) {
   return e;
 }
 
+// No app Android não há servidor: a consulta vai direto para o código Java do celular.
+let seq = 0;
+const pendentes = new Map();
+window.__olho = (id, json) => {
+  const f = pendentes.get(id);
+  pendentes.delete(id);
+  if (f) f(JSON.parse(json));
+};
+
+function apiNativa(caminho, corpo) {
+  if (caminho !== '/api/consultar') return Promise.resolve({ ok: true, status: 200, dados: {} });
+  return new Promise((res) => {
+    const id = ++seq;
+    pendentes.set(id, (d) => res({ ok: !d.erro, status: d.erro ? 400 : 200, dados: d }));
+    NATIVO.consultar(id, JSON.stringify(corpo));
+  });
+}
+
 async function api(caminho, corpo) {
+  if (NATIVO) return apiNativa(caminho, corpo);
   const r = await fetch(caminho, corpo === undefined ? {} : {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
   });
@@ -27,7 +47,7 @@ async function api(caminho, corpo) {
 function mostrar(tela) {
   $('tela-entrar').hidden = tela !== 'entrar';
   $('tela-app').hidden = tela !== 'app';
-  $('sair').hidden = tela !== 'app';
+  $('sair').hidden = tela !== 'app' || !!NATIVO;
   if (tela === 'entrar') $('senha-app').focus();
 }
 
@@ -98,7 +118,7 @@ $('form-teste').addEventListener('submit', async (e) => {
     guardarRecente(ip, $('usuario').value.trim());
     desenharResultado(r.dados);
   } catch {
-    $('resultado').replaceChildren(el('div', { class: 'cartao' }, el('p', { class: 'erro' }, 'Sem contato com o servidor do app.')));
+    $('resultado').replaceChildren(el('div', { class: 'cartao' }, el('p', { class: 'erro' }, NATIVO ? 'Falha no teste.' : 'Sem contato com o servidor do app.')));
   } finally {
     botao.disabled = false;
     botao.textContent = 'Testar conexão';

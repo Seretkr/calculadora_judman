@@ -1,0 +1,56 @@
+# Compila o app Android do Olho Intelbras e publica o APK em Releases para baixar direto no celular.
+name: Olho Intelbras (Android)
+
+on:
+  push:
+    paths:
+      - 'camera-intelbras/**'
+      - '.github/workflows/olho-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      # Opcional: com o segredo OLHO_KEYSTORE (keystore em base64), todas as versões saem com a mesma assinatura
+      # e o celular atualiza sem desinstalar. Sem ele, usa uma chave nova a cada compilação.
+      - name: Chave de assinatura
+        env:
+          KEYSTORE: ${{ secrets.OLHO_KEYSTORE }}
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            mkdir -p ~/.android
+            echo "$KEYSTORE" | base64 -d > ~/.android/debug.keystore
+          fi
+
+      - name: Compilar APK
+        run: gradle -p camera-intelbras/android assembleDebug --no-daemon
+
+      - name: Publicar em Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp camera-intelbras/android/app/build/outputs/apk/debug/app-debug.apk olho-intelbras.apk
+          gh release create "olho-android-${{ github.run_number }}" olho-intelbras.apk \
+            --target "${{ github.sha }}" \
+            --title "Olho Intelbras para Android (versão ${{ github.run_number }})" \
+            --notes "Baixe olho-intelbras.apk no celular Android e instale. Branch: ${{ github.ref_name }}."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: olho-intelbras-apk
+          path: olho-intelbras.apk

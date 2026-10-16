@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Câmeras da rede interna só falam HTTP; o código Java recusa qualquer IP que não seja de rede interna -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
