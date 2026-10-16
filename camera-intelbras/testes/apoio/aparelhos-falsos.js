@@ -4,12 +4,17 @@
 // Os testes que passam pelo servidor usam 192.168.77.x, redirecionado para cá por redirecionar.js.
 
 const http = require('http');
+const https = require('https');
 const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const PORTAS = { http: 18080, rtsp: 18554, servico: 37777 };
+const PORTAS = { http: 18080, https: 18443, rtsp: 18554, servico: 37777 };
+const TLS = {
+  key: fs.readFileSync(path.join(__dirname, 'certificado-teste', 'chave.pem')),
+  cert: fs.readFileSync(path.join(__dirname, 'certificado-teste', 'certificado.pem')),
+};
 const md5 = (s) => crypto.createHash('md5').update(s).digest('hex');
 const IMAGENS = [1, 2, 3, 4, 5].map((i) => fs.readFileSync(path.join(__dirname, 'imagens', `img${i}.jpg`)));
 
@@ -22,6 +27,12 @@ const APARELHOS = [
     canais: ['Doca'], perda: [], rtsp: true, desloc: 2 },
   { ip: '127.0.0.41', senha: 'senha123', modelo: 'VIP 1130 B', classe: 'IPC', nome: 'Recepcao', mac: '3C:EF:8C:00:00:41',
     canais: ['Recepção'], perda: [], rtsp: true, desloc: 1 },
+  // Gravador de firmware antigo: não informa a classe nem o nome dos canais, só quantas entradas tem
+  { ip: '127.0.0.60', senha: 'senha123', modelo: 'VD 3108', nome: 'DVR Deposito', semClasse: true, semTitulos: true, entradas: 8, mac: '3C:EF:8C:00:00:60',
+    canais: Array.from({ length: 8 }, (_, i) => `CAM ${i + 1}`), perda: [], rtsp: false, desloc: 0 },
+  // NVR de firmware novo: a página web em HTTP manda para HTTPS
+  { ip: '127.0.0.70', senha: 'senha123', modelo: 'NVD 1404', classe: 'NVR', nome: 'NVR Escritorio', soHttps: true, mac: '3C:EF:8C:00:00:70',
+    canais: ['Corredor', 'Garagem', 'Portaria', 'Quintal'], perda: [], rtsp: false, desloc: 1 },
   // Não é Intelbras: só uma página que pede usuário/senha em Basic (ex.: roteador ou aparelho malicioso)
   { ip: '127.0.0.50', impostor: true },
 ];
@@ -45,7 +56,7 @@ function aparelho(d, registro) {
   };
   const servidores = [];
 
-  servidores.push(http.createServer((req, res) => {
+  const atender = (req, res) => {
     reg.pedidos++;
     const auth = req.headers.authorization;
     if (auth) reg.autorizacoes.push(auth);
@@ -61,10 +72,17 @@ function aparelho(d, registro) {
     const u = req.url;
     const txt = (t) => { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end(t); };
     if (u.includes('getDeviceType')) return txt(`type=${d.modelo}\r\n`);
-    if (u.includes('getDeviceClass')) return txt(`class=${d.classe}\r\n`);
+    if (u.includes('getDeviceClass')) {
+      if (d.semClasse) { res.writeHead(400); return res.end('Error\r\nBad Request!\r\n'); }
+      return txt(`class=${d.classe}\r\n`);
+    }
+    if (u.includes('getSoftwareVersion')) return txt('version=4.001.0000000.6.R,build:2024-05-10\r\n');
+    if (u.includes('devVideoInput.cgi?action=getCollect')) return txt(`result=${d.entradas || d.canais.length}\r\n`);
+    if (u.includes('MaxRemoteInputChannels')) { res.writeHead(400); return res.end('Error\r\n'); }
     if (u.includes('getSystemInfo')) return txt(`deviceType=${d.modelo}\r\nserialNumber=SN${d.ip.split('.')[3]}\r\n`);
     if (u.includes('getMachineName')) return txt(`name=${d.nome}\r\n`);
     if (u.includes('name=Network')) return txt(`table.Network.eth0.IPAddress=${d.ip}\r\ntable.Network.eth0.PhysicalAddress=${d.mac.toLowerCase()}\r\n`);
+    if (u.includes('ChannelTitle') && d.semTitulos) { res.writeHead(400); return res.end('Error\r\nBad Request!\r\n'); }
     if (u.includes('ChannelTitle')) return txt(d.canais.map((n, i) => `table.ChannelTitle[${i}].Name=${n}`).join('\r\n'));
     if (u.includes('VideoLoss')) {
       if (!d.perda.length) { res.writeHead(400); return res.end('Error'); }
@@ -78,7 +96,18 @@ function aparelho(d, registro) {
     }
     res.writeHead(404);
     res.end();
-  }).listen(PORTAS.http, d.ip));
+  };
+
+  if (d.soHttps) {
+    servidores.push(http.createServer((req, res) => {
+      reg.pedidos++;
+      res.writeHead(301, { Location: `https://${String(req.headers.host).split(':')[0]}:${PORTAS.https}${req.url}` });
+      res.end();
+    }).listen(PORTAS.http, d.ip));
+    servidores.push(https.createServer(TLS, atender).listen(PORTAS.https, d.ip));
+  } else {
+    servidores.push(http.createServer(atender).listen(PORTAS.http, d.ip));
+  }
 
   if (d.rtsp) {
     servidores.push(net.createServer((s) => s.on('data', (c) => {
@@ -112,4 +141,4 @@ async function iniciar() {
 module.exports = { iniciar, APARELHOS, PORTAS };
 
 // node aparelhos-falsos.js  -> deixa os aparelhos ligados (útil para testar à mão)
-if (require.main === module) iniciar().then(() => console.log('Aparelhos falsos ligados em 127.0.0.10/20/30/41/50'));
+if (require.main === module) iniciar().then(() => console.log('Aparelhos falsos ligados em 127.0.0.10/20/30/41/50/60/70'));

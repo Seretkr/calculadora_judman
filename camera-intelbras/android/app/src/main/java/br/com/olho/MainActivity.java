@@ -376,6 +376,26 @@ public class MainActivity extends Activity {
             });
         }
 
+        // Diagnóstico técnico de um IP (o que o aparelho responde). Volta por window.__olho(id, json).
+        @JavascriptInterface
+        public void diagnosticar(final int id, final String json) {
+            exec.execute(() -> {
+                JSONObject r;
+                try {
+                    JSONObject b = new JSONObject(json);
+                    String ip = b.optString("ip", "").trim();
+                    if (!Intelbras.ipInterno(ip)) r = erro("Use um IP da rede interna (ex.: 192.168.1.108).");
+                    else {
+                        Intelbras.Cam cam = lerCam(b, ip);
+                        r = cam.portaHttp < 0 || cam.portaRtsp < 0 ? erro("Porta inválida.") : Intelbras.diagnostico(cam);
+                    }
+                } catch (Exception e) {
+                    r = erro("Falha no diagnóstico: " + e.getMessage());
+                }
+                js("__olho", id, r);
+            });
+        }
+
         // Scanner: cada aparelho achado chega por window.__olhoEvento(id, json); o fim por window.__olho(id, json).
         @JavascriptInterface
         public void varrer(final int id, final String json) {

@@ -149,6 +149,19 @@
       <div id="mosaico-grade" class="grade"></div>
     </section>
 
+    <!-- Diagnóstico técnico -->
+    <section id="tela-diagnostico" class="tela" hidden>
+      <div class="cartao">
+        <p class="fraco pequeno">O que o aparelho respondeu em cada porta e em cada endereço da API. Mande este texto para o suporte para descobrir por que ele não foi reconhecido. A senha não aparece aqui.</p>
+        <div class="botoes">
+          <button type="button" id="diag-compartilhar" class="principal pequeno">Compartilhar</button>
+          <button type="button" id="diag-copiar">Copiar</button>
+        </div>
+        <p id="diag-status" class="fraco pequeno" aria-live="polite"></p>
+      </div>
+      <pre id="diag-texto" class="diagnostico"></pre>
+    </section>
+
     <!-- Backup -->
     <section id="tela-backup" class="tela" hidden>
       <div class="cartao">

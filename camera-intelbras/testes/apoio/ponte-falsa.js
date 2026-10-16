@@ -16,6 +16,12 @@
       if (b.senhaCifrada) b.senha = atob(b.senhaCifrada.slice(2));
       post(b).then((r) => resp('__olho', id, r));
     },
+    diagnosticar(id, json) {
+      const b = JSON.parse(json);
+      if (b.senhaCifrada) b.senha = atob(b.senhaCifrada.slice(2));
+      fetch('/api/diagnostico', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...b, ...PORTAS }) }).then((r) => r.json()).then((r) => resp('__olho', id, r));
+    },
     varrer(id, json) {
       const b = JSON.parse(json);
       const a = Number(b.inicio.split('.')[3]);

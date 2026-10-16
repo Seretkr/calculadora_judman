@@ -121,3 +121,7 @@ button.perigo { color: var(--erro); border-color: var(--erro); background: none;
 .botao-arquivo.link { border: 0; color: var(--marca); padding: 4px; background: none; }
 .botao-arquivo input { display: none; }
 .obs { white-space: pre-wrap; background: var(--fundo); border-radius: 10px; padding: 10px; font-size: .92rem; }
+
+.diagnostico { background: var(--cartao); border: 1px solid var(--borda); border-radius: 12px; padding: 12px; font: .78rem/1.45 ui-monospace, Menlo, Consolas, monospace;
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+button.link.espaco { display: block; width: 100%; text-align: center; }

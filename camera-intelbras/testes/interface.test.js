@@ -157,7 +157,10 @@ describe('app Android (tela)', () => {
     await p.click('#form-exportar button');
     await p.waitForFunction(() => window.__arquivos.some((a) => a.nome.endsWith('.olho')));
     const arq = await p.evaluate(() => window.__arquivos.find((a) => a.nome.endsWith('.olho')));
-    assert.doesNotMatch(arq.conteudo, /senha123|Recepcao|Loja/, 'nada legível no backup');
+    const externo = JSON.parse(arq.conteudo);
+    assert.deepEqual(Object.keys(externo).sort(), ['dados', 'iteracoes', 'iv', 'kdf', 'olho', 'sal'], 'só cabeçalho da cifra fica legível');
+    const bruto = Buffer.from(externo.dados, 'base64').toString('latin1');
+    assert.ok(!/senha123|Recepcao|Loja|192\.168/.test(bruto), 'conteúdo cifrado não tem texto legível');
     const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'olho-bk-')), arq.nome);
     fs.writeFileSync(tmp, arq.conteudo);
     await p.evaluate(async () => { for (const d of await banco.listar()) await banco.apagar(d.id); });
@@ -236,6 +239,37 @@ describe('app Android (tela)', () => {
     assert.ok(linhas[2].startsWith('"Portão; ""frente"""'), 'nome com ; e aspas fica entre aspas: ' + linhas[2]);
     assert.ok(linhas[2].includes(`;"'=HYPERLINK(""http://mal"")";`), 'fórmula neutralizada com apóstrofo: ' + linhas[2]);
     assert.match(arquivos['LEIA-ME.txt'].dados.toString('utf8'), /SEM SENHAS/);
+  });
+
+  t('DVR antigo (sem nomes de canal) aparece como gravador com todos os canais', async () => {
+    await p.click('#abas [data-aba=testar]');
+    await p.fill('#ip', '192.168.77.60');
+    await p.fill('#senha', 'senha123');
+    await p.click('#testar');
+    await p.waitForSelector('text=Câmeras do gravador (8)');
+    assert.match(await p.textContent('#resultado .info'), /Firmware4\.001\.0000000\.6/);
+  });
+
+  t('NVR com HTTPS aparece como gravador', async () => {
+    await p.fill('#ip', '192.168.77.70');
+    await p.click('#testar');
+    await p.waitForSelector('text=Câmeras do gravador (4)');
+    assert.match(await p.textContent('#resultado .info'), /Página webHTTPS/);
+  });
+
+  t('diagnóstico técnico: relatório para compartilhar, sem a senha', async () => {
+    await p.click('text=Diagnóstico técnico');
+    await p.waitForFunction(() => /Respostas:/.test(document.querySelector('#diag-texto').textContent), null, { timeout: 30000 });
+    const texto = await p.textContent('#diag-texto');
+    assert.match(texto, /Diagnóstico Olho Intelbras · 192\.168\.77\.70/);
+    assert.match(texto, /redireciona: https:/);
+    assert.match(texto, /getDeviceType[\s\S]*NVD 1404/);
+    assert.doesNotMatch(texto, /senha123/);
+    await p.click('#diag-compartilhar');
+    const arq = await p.evaluate(() => window.__arquivos.find((a) => a.nome.startsWith('diagnostico-')));
+    assert.match(arq.nome, /^diagnostico-\d+\.txt$/);
+    assert.equal(arq.conteudo, texto);
+    await p.evaluate(() => window.voltar());
   });
 
   t('nenhum erro de JavaScript na página', () => { assert.deepEqual(erros, []); });

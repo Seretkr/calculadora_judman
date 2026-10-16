@@ -134,6 +134,41 @@ describe('consulta de aparelhos', () => {
     assert.equal(aparelhos.registro['127.0.0.30'].falhas, 1);
   });
 
+  test('DVR antigo sem classe nem nomes de canal: gravador com 8 canais', async () => {
+    const r = (await c.consultar({ ip: '192.168.77.60', senha: 'senha123' })).json;
+    assert.equal(r.tipo, 'Gravador');
+    assert.equal(r.canais.length, 8);
+    assert.equal(r.canais[0].nome, 'Canal 1');
+    const img = await c.pedir(`/api/imagem/${r.token}/8`);
+    assert.equal(img.status, 200);
+  });
+
+  test('NVR que redireciona a página web para HTTPS: segue e reconhece', async () => {
+    const r = (await c.consultar({ ip: '192.168.77.70', senha: 'senha123' })).json;
+    assert.equal(r.tipo, 'Gravador');
+    assert.equal(r.https, true);
+    assert.equal(r.canais.length, 4);
+    assert.equal(r.mac, '3C:EF:8C:00:00:70');
+    const img = await c.pedir(`/api/imagem/${r.token}/2`);
+    assert.equal(img.status, 200);
+    assert.equal(img.bytes[0], 0xff);
+  });
+
+  test('diagnóstico: portas, respostas e nenhuma senha', async () => {
+    const r = await c.pedir('/api/diagnostico', { metodo: 'POST', corpo: { ip: '192.168.77.60', senha: 'senha123', portaHttp: 18080, portaRtsp: 18554 } });
+    assert.equal(r.status, 200);
+    assert.ok(r.json.pedidos.find((p) => p.caminho.includes('getDeviceClass') && p.status === 400));
+    assert.ok(r.json.pedidos.find((p) => p.caminho.includes('getCollect') && /result=8/.test(p.trecho)));
+    assert.doesNotMatch(r.corpo, /senha123|response=|nonce=/);
+  });
+
+  test('diagnóstico com senha errada para na primeira recusa', async () => {
+    aparelhos.zerar();
+    const r = await c.pedir('/api/diagnostico', { metodo: 'POST', corpo: { ip: '192.168.77.30', senha: 'errada', portaHttp: 18080, portaRtsp: 18554 } });
+    assert.match(r.json.parou, /Senha recusada/);
+    assert.equal(aparelhos.registro['127.0.0.30'].falhas, 1);
+  });
+
   test('IP sem aparelho aparece como offline', async () => {
     const r = (await c.consultar({ ip: '192.168.77.99', senha: 'x' })).json;
     assert.equal(r.situacao, 'offline');

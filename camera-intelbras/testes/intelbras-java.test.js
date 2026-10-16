@@ -93,6 +93,38 @@ t('baixa imagem JPEG do canal', () => {
   assert.equal(r.imagem.jpeg, true);
 });
 
+t('DVR antigo sem nomes de canal: reconhece como gravador e conta as 8 entradas', () => {
+  assert.equal(r.dvrAntigo.tipo, 'Gravador');
+  assert.equal(r.dvrAntigo.canais.length, 8);
+  assert.equal(r.dvrAntigo.canais[7].nome, 'Canal 8');
+  assert.equal(r.dvrAntigo.firmware, '4.001.0000000.6.R,build:2024-05-10');
+  assert.equal(r.idDvrAntigo.gravador, true);
+  assert.equal(r.idDvrAntigo.canais, 8);
+});
+
+t('NVR que redireciona para HTTPS: segue, reconhece e baixa imagem', () => {
+  assert.equal(r.nvrHttps.tipo, 'Gravador');
+  assert.equal(r.nvrHttps.https, true);
+  assert.deepEqual(r.nvrHttps.canais.map((x) => x.nome), ['Corredor', 'Garagem', 'Portaria', 'Quintal']);
+  assert.equal(r.idNvrHttps.canais, 4);
+  assert.equal(r.imagemNvrHttps.status, 200);
+  assert.equal(r.imagemNvrHttps.jpeg, true);
+});
+
+t('diagnóstico mostra portas e respostas, sem a senha', () => {
+  const d = r.diagCamera;
+  assert.ok(d.portas.find((p) => p.porta === 37777 && p.ok));
+  assert.ok(d.pedidos.find((p) => p.caminho.includes('getDeviceType') && p.status === 200 && /VIP 1230 B/.test(p.trecho)));
+  assert.ok(d.pedidos.find((p) => p.caminho.includes('snapshot') && /imagem \d+ bytes/.test(p.trecho)));
+  assert.doesNotMatch(JSON.stringify(r.diagCamera) + JSON.stringify(r.diagSenhaErrada), /senha123|errada-diag|response=|nonce=/);
+  assert.ok(r.diagNvrHttps.pedidos.some((p) => p.https), 'marca quando passou para HTTPS');
+});
+
+t('diagnóstico com senha errada para na primeira recusa', () => {
+  assert.match(r.diagSenhaErrada.parou, /Senha recusada/);
+  assert.equal(aparelhos.registro['127.0.0.30'].falhas, 3, '1 da consulta + 1 do scanner + 1 do diagnóstico');
+});
+
 test('VULN-03: scanner não manda a senha para aparelho que não é Intelbras', { todo: 'o scanner manda usuário e senha (até em Basic) para qualquer IP com porta web' }, (ctx) => {
   if (motivo) return ctx.skip(motivo);
   const recebidas = aparelhos.registro['127.0.0.50'].autorizacoes;

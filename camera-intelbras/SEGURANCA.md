@@ -127,6 +127,10 @@ As listas de tentativas por IP e de consultas crescem sem limite. Só usuários 
 - Servidor: senha do app com scrypt, bloqueio após 5 erros, cookie `HttpOnly` + `SameSite=Strict`, pedido de outro site recusado (Origin e JSON obrigatório), sem acesso a arquivos fora de `public`, token de imagem preso à sessão.
 - Uma tentativa de senha por consulta, para não estourar o limite de 5 erros da Intelbras.
 
+## Risco aceito: HTTPS dos aparelhos sem validar certificado
+
+Quando um gravador redireciona a página web para HTTPS, o app segue e **não valida o certificado**. Os aparelhos usam certificado autoassinado, e não há como validar. Isso só acontece para IP de rede interna e para o mesmo IP que redirecionou. Com isso, a proteção fica igual à do HTTP comum (Digest), nem melhor nem pior.
+
 ## Limitação que não depende do app
 
 A conversa com câmeras Intelbras é em HTTP com Digest MD5, e o RTSP não é cifrado: é assim que os aparelhos funcionam. Na mesma rede, dá para ver as imagens e tentar quebrar o hash. Recomendação: câmeras numa VLAN separada, sem acesso da rede de visitantes.

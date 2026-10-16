@@ -124,7 +124,7 @@ async function abrirDetalhe(id) {
     area.replaceChildren(el('p', { class: 'carregando' }, `Conectando em ${d.ip}…`));
     const r = await testarDispositivo(d);
     if (r.erro) area.replaceChildren(el('p', { class: 'erro' }, r.erro));
-    else desenharResultado(r, area, { titulo: d.nome });
+    else desenharResultado(r, area, { titulo: d.nome, pedido: pedidoDe(d) });
     testar.disabled = false;
     testar.textContent = 'Testar agora';
   } }, 'Testar agora');

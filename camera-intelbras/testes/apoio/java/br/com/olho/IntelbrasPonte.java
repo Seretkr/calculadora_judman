@@ -22,6 +22,8 @@ public final class IntelbrasPonte {
 
     public static JSONObject identificar(String ip, String senha) throws Exception { return Intelbras.identificar(cam(ip, senha)); }
 
+    public static JSONObject diagnostico(String ip, String senha) throws Exception { return Intelbras.diagnostico(cam(ip, senha)); }
+
     public static JSONObject imagem(String ip, String senha, int canal) throws Exception {
         Intelbras.Resposta r = Intelbras.imagem(cam(ip, senha), canal);
         return new JSONObject().put("status", r.status).put("tipo", r.tipo).put("tamanho", r.corpo.length)

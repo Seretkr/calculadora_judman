@@ -172,10 +172,13 @@ function autorizacao(desafio, cam, metodo, uri) {
 function pedidoHttp(cam, caminho, auth) {
   return new Promise((res) => {
     const t0 = Date.now();
-    const req = http.request({
-      host: cam.ip, port: cam.portaHttp, path: caminho, method: 'GET',
+    // Certificado do gravador é sempre autoassinado: não há como validar (só IP de rede interna chega aqui).
+    const modulo = cam.https ? https : http;
+    const req = modulo.request({
+      host: cam.ip, port: cam.https ? cam.portaHttps : cam.portaHttp, path: caminho, method: 'GET',
       headers: auth ? { Authorization: auth } : {},
       timeout: TEMPO * 2,
+      ...(cam.https ? { rejectUnauthorized: false, checkServerIdentity: () => undefined } : {}),
     }, (r) => {
       const partes = [];
       let tam = 0;
@@ -194,12 +197,72 @@ function pedidoHttp(cam, caminho, auth) {
 
 // GET com autenticação. Guarda o desafio para não errar a senha duas vezes (a Intelbras bloqueia o usuário após 5 erros).
 async function getCam(cam, caminho) {
+  let r = await getSemRedirecionar(cam, caminho);
+  // Firmware novo costuma mandar a página web para HTTPS (301/302). Segue só se for o mesmo aparelho.
+  if (!cam.https && r.status >= 301 && r.status <= 308 && r.headers.location) {
+    try {
+      const destino = new URL(r.headers.location, `http://${cam.ip}:${cam.portaHttp}${caminho}`);
+      if (destino.protocol === 'https:' && destino.hostname === cam.ip) {
+        Object.assign(cam, { https: true, portaHttps: Number(destino.port) || 443, desafio: null });
+        r = await getSemRedirecionar(cam, caminho);
+        r.redirecionado = destino.href;
+      }
+    } catch { /* Location inválido: fica com a resposta original */ }
+  }
+  return r;
+}
+
+async function getSemRedirecionar(cam, caminho) {
   let r = await pedidoHttp(cam, caminho, cam.desafio ? autorizacao(cam.desafio, cam, 'GET', caminho) : null);
   if (r.status === 401 && r.headers['www-authenticate']) {
     cam.desafio = r.headers['www-authenticate'];
     r = await pedidoHttp(cam, caminho, autorizacao(cam.desafio, cam, 'GET', caminho));
   }
   return r;
+}
+
+const numeroDe = (o, sufixo) => {
+  const k = Object.keys(o).find((x) => x.endsWith(sufixo));
+  return k ? Number.parseInt(o[k], 10) || 0 : 0;
+};
+
+// Canais com nome (ChannelTitle). Se o aparelho não tiver essa configuração, conta as entradas de vídeo
+// locais (DVR) e as remotas (NVR/câmeras IP) e numera "Canal N".
+async function lerCanais(cam, nomePadrao) {
+  const titulos = await getCam(cam, '/cgi-bin/configManager.cgi?action=getConfig&name=ChannelTitle');
+  const canais = [];
+  if (titulos.status === 200) {
+    for (const [k, v] of Object.entries(chaves(titulos.corpo.toString()))) {
+      const m = k.match(/ChannelTitle\[(\d+)\]\.Name$/);
+      if (m) canais[Number(m[1])] = { canal: Number(m[1]) + 1, nome: v };
+    }
+  }
+  const lista = canais.filter(Boolean);
+  if (lista.length) return lista;
+  const [locais, remotos] = await Promise.all([
+    getCam(cam, '/cgi-bin/devVideoInput.cgi?action=getCollect'),
+    getCam(cam, '/cgi-bin/magicBox.cgi?action=getProductDefinition&name=MaxRemoteInputChannels'),
+  ]);
+  let n = (locais.status === 200 ? numeroDe(chaves(locais.corpo.toString()), 'result') : 0)
+    + (remotos.status === 200 ? numeroDe(chaves(remotos.corpo.toString()), 'MaxRemoteInputChannels') : 0);
+  n = Math.min(Math.max(n, 1), 128);
+  return Array.from({ length: n }, (_, i) => ({ canal: i + 1, nome: n === 1 && nomePadrao ? nomePadrao : `Canal ${i + 1}` }));
+}
+
+// Gravador: mais de um canal, ou classe/modelo de gravador (DVR, NVR, XVR, MHDX, NVD, HDCVI, VD...).
+const ehGravador = (classe, modelo, canais) => canais > 1
+  || /DVR|NVR|XVR|HCVR|MHDX|NVD|IVR|HDCVI|MVD|SVR|GRAVADOR|\bVD\b/.test(`${classe} ${modelo}`.toUpperCase());
+
+async function mac(cam) {
+  const r = await getCam(cam, '/cgi-bin/configManager.cgi?action=getConfig&name=Network');
+  if (r.status !== 200) return '';
+  const e = Object.entries(chaves(r.corpo.toString())).find(([k, v]) => k.endsWith('.PhysicalAddress') && v);
+  return e ? e[1].toUpperCase() : '';
+}
+
+async function firmware(cam) {
+  const r = await getCam(cam, '/cgi-bin/magicBox.cgi?action=getSoftwareVersion');
+  return r.status === 200 ? chaves(r.corpo.toString()).version || '' : '';
 }
 
 // Fila por aparelho: gravador antigo trava se pedir 16 imagens de uma vez.
@@ -325,21 +388,13 @@ async function consultar(cam) {
   resultado.modelo = t.type || s.deviceType || 'Intelbras';
   resultado.nome = n.name || '';
   resultado.serie = s.serialNumber || '';
-  resultado.gravador = /DVR|NVR|XVR|HCVR|MHDX|NVD|IVR/.test(classeTxt + ' ' + resultado.modelo.toUpperCase());
+  let lista = await lerCanais(cam, resultado.nome || 'Canal 1');
+  resultado.gravador = ehGravador(classeTxt, resultado.modelo, lista.length);
   resultado.tipo = resultado.gravador ? 'Gravador' : 'Câmera';
   resultado.webMs = tipo.ms;
-
-  // Canais: o nome de cada canal vem da configuração ChannelTitle.
-  const titulos = await getCam(cam, '/cgi-bin/configManager.cgi?action=getConfig&name=ChannelTitle');
-  const canais = [];
-  if (titulos.status === 200) {
-    for (const [k, v] of Object.entries(chaves(titulos.corpo.toString()))) {
-      const m = k.match(/ChannelTitle\[(\d+)\]\.Name$/);
-      if (m) canais[Number(m[1])] = { canal: Number(m[1]) + 1, nome: v };
-    }
-  }
-  let lista = canais.filter(Boolean);
-  if (!lista.length) lista = [{ canal: 1, nome: resultado.nome || 'Canal 1' }];
+  resultado.mac = await mac(cam);
+  resultado.firmware = await firmware(cam);
+  resultado.https = !!cam.https;
   if (!resultado.gravador) lista = lista.slice(0, 1);
 
   // Canais com perda de vídeo (câmera desconectada do gravador).
@@ -366,6 +421,62 @@ async function consultar(cam) {
     ? `${resultado.tipo} com ${lista.length} canal(is). Toque em uma imagem para ampliar.`
     : 'Câmera respondendo. Imagem capturada agora.';
   return resultado;
+}
+
+// ---------- diagnóstico: o que o aparelho responde, para descobrir por que não foi reconhecido ----------
+
+const SONDAS = [
+  '/',
+  '/cgi-bin/magicBox.cgi?action=getDeviceType',
+  '/cgi-bin/magicBox.cgi?action=getDeviceClass',
+  '/cgi-bin/magicBox.cgi?action=getSystemInfo',
+  '/cgi-bin/magicBox.cgi?action=getSoftwareVersion',
+  '/cgi-bin/magicBox.cgi?action=getMachineName',
+  '/cgi-bin/configManager.cgi?action=getConfig&name=ChannelTitle',
+  '/cgi-bin/devVideoInput.cgi?action=getCollect',
+  '/cgi-bin/magicBox.cgi?action=getProductDefinition&name=MaxRemoteInputChannels',
+  '/cgi-bin/snapshot.cgi?channel=1',
+  '/cgi-bin/snapshot.cgi?channel=2',
+  '/onvif/device_service',
+];
+const PORTAS_DIAGNOSTICO = [80, 443, 554, 37777, 34567, 8000, 8080, 8899, 9000];
+
+function trecho(r) {
+  const tipo = (r.headers && r.headers['content-type']) || '';
+  if (tipo.startsWith('image')) return `[imagem ${r.corpo.length} bytes]`;
+  return (r.corpo || Buffer.alloc(0)).subarray(0, 600).toString('utf8').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '').trim();
+}
+
+// Só o tipo e o realm do desafio (nunca a resposta com senha).
+function desafioResumido(www) {
+  const realm = (String(www).match(/realm="([^"]*)"/i) || [])[1];
+  return String(www).trim().split(/\s+/)[0] + (realm !== undefined ? ` realm="${realm}"` : '');
+}
+
+async function diagnostico(cam) {
+  const r = { ip: cam.ip, quando: new Date().toISOString().replace('T', ' ').slice(0, 19), usuario: cam.usuario,
+    portaHttp: cam.portaHttp, portaRtsp: cam.portaRtsp, pedidos: [] };
+  const portas = [...new Set([...PORTAS_DIAGNOSTICO, cam.portaHttp, cam.portaRtsp])].sort((a, b) => a - b);
+  r.portas = await Promise.all(portas.map((p) => tcp(cam.ip, p, 1500)));
+  for (const sonda of SONDAS) {
+    const x = await getCam(cam, sonda);
+    const o = { caminho: sonda, status: x.status, ms: x.ms };
+    if (x.erro) o.erro = x.erro;
+    const h = x.headers || {};
+    if (h['content-type']) o.tipo = h['content-type'];
+    if (h.server) o.servidor = h.server;
+    if (x.redirecionado || h.location) o.redireciona = x.redirecionado || h.location;
+    if (h['www-authenticate']) o.desafio = desafioResumido(h['www-authenticate']);
+    if (cam.https) o.https = true;
+    o.trecho = trecho(x);
+    r.pedidos.push(o);
+    if (x.status === 401 && cam.desafio) {
+      r.parou = 'Senha recusada: parei aqui para não bloquear o usuário (a Intelbras bloqueia após 5 erros).';
+      break;
+    }
+    if (x.status === 0 && sonda === '/') { r.parou = 'A página web não respondeu.'; break; }
+  }
+  return r;
 }
 
 async function imagem(cam, canal) {
@@ -475,6 +586,17 @@ async function rotas(req, res) {
         r.token = token;
       }
       return enviar(res, 200, r);
+    }
+
+    if (req.method === 'POST' && rota === '/api/diagnostico') {
+      const b = await lerJson(req).catch(() => null);
+      if (!b) return enviar(res, 400, { erro: 'pedido inválido' });
+      const ip = String(b.ip || '').trim();
+      if (!ipInterno(ip)) return enviar(res, 400, { erro: 'Use um IP da rede interna (ex.: 192.168.1.108).' });
+      const cam = { ip, portaHttp: porta(b.portaHttp, 80), portaRtsp: porta(b.portaRtsp, 554),
+        usuario: String(b.usuario || 'admin').slice(0, 64), senha: String(b.senha || '').slice(0, 128) };
+      if (!cam.portaHttp || !cam.portaRtsp) return enviar(res, 400, { erro: 'Porta inválida.' });
+      return enviar(res, 200, await diagnostico(cam));
     }
 
     const mImg = rota.match(/^\/api\/imagem\/([a-f0-9]{48})\/(\d{1,3})$/);

@@ -48,8 +48,9 @@ function nativo(metodo, corpo, aoEvento) {
 
 async function api(caminho, corpo) {
   if (NATIVO) {
-    if (caminho !== '/api/consultar') return { ok: true, status: 200, dados: {} };
-    const d = await nativo('consultar', corpo);
+    const metodo = { '/api/consultar': 'consultar', '/api/diagnostico': 'diagnosticar' }[caminho];
+    if (!metodo) return { ok: true, status: 200, dados: {} };
+    const d = await nativo(metodo, corpo);
     return { ok: !d.erro, status: d.erro ? 400 : 200, dados: d };
   }
   const r = await fetch(caminho, corpo === undefined ? {} : {

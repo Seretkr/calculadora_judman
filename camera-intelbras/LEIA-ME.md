@@ -95,6 +95,12 @@ Usa a API web dos aparelhos Intelbras de linha profissional (VIP, MHDX, NVD, iMH
 
 As linhas de nuvem (Mibo, iM) usam outro sistema e aparecem como "não reconheci a API Intelbras".
 
+## Gravadores (DVR/NVR) não reconhecidos
+
+O app considera **gravador** todo aparelho com mais de um canal, ou cujo modelo/classe indique gravador (DVR, NVR, XVR, MHDX, NVD, HDCVI, VD...). Quando o aparelho não informa o nome dos canais, ele conta as entradas de vídeo (`devVideoInput`) e os canais IP (`MaxRemoteInputChannels`) e mostra "Canal 1", "Canal 2"... Se a página web redireciona para HTTPS, o app segue.
+
+Se ainda assim não reconhecer, toque em **"Não reconheceu? Gerar diagnóstico técnico"** no resultado e use **Compartilhar** para mandar o texto. Ele mostra quais portas estão abertas e o que o aparelho respondeu em cada endereço da API, sem a senha. Se a senha for recusada, ele para na primeira tentativa.
+
 ## Problemas comuns
 
 | Situação | O que fazer |
@@ -106,6 +112,6 @@ As linhas de nuvem (Mibo, iM) usam outro sistema e aparecem como "não reconheci
 
 ## Testes e segurança
 
-`npm test` roda 59 testes: servidor, código Java do app, tela no tamanho de celular (inclui backup e exportação ZIP) e segurança. Os testes usam aparelhos falsos, então não precisam de câmera de verdade. No GitHub, o APK só é compilado se os testes passarem.
+`npm test` roda 70 testes: servidor, código Java do app, tela no tamanho de celular (inclui backup e exportação ZIP) e segurança. Os testes usam aparelhos falsos, então não precisam de câmera de verdade. No GitHub, o APK só é compilado se os testes passarem.
 
 As vulnerabilidades encontradas e as correções propostas estão em [SEGURANCA.md](SEGURANCA.md).

@@ -14,6 +14,12 @@ import java.net.Proxy;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URL;
+import java.security.cert.X509Certificate;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -42,6 +48,23 @@ final class Intelbras {
     private static final SecureRandom ALEATORIO = new SecureRandom();
     private static final ExecutorService PORTAS = Executors.newCachedThreadPool();
     private static final Map<String, Semaphore> FILAS = new ConcurrentHashMap<>();
+    private static final SSLSocketFactory TLS_DO_APARELHO = tlsDoAparelho();
+
+    // Gravadores e câmeras usam certificado autoassinado: não há como validar. Só usado para IP de rede interna.
+    private static SSLSocketFactory tlsDoAparelho() {
+        try {
+            TrustManager[] aceita = {new X509TrustManager() {
+                @Override public void checkClientTrusted(X509Certificate[] c, String t) { }
+                @Override public void checkServerTrusted(X509Certificate[] c, String t) { }
+                @Override public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+            }};
+            SSLContext ctx = SSLContext.getInstance("TLS");
+            ctx.init(null, aceita, ALEATORIO);
+            return ctx.getSocketFactory();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     static final class Cam {
         String ip;
@@ -51,6 +74,8 @@ final class Intelbras {
         int portaRtsp;
         volatile String desafio;
         volatile String desafioRtsp;
+        volatile boolean https; // o aparelho redirecionou a página web para HTTPS
+        volatile int portaHttps = 443;
     }
 
     static final class Resposta {
@@ -58,6 +83,9 @@ final class Intelbras {
         String erro;
         String www;
         String tipo;
+        String local; // cabeçalho Location (redirecionamento)
+        String servidor; // cabeçalho Server
+        String redirecionado; // para onde o aparelho mandou (HTTP -> HTTPS)
         byte[] corpo = new byte[0];
         long ms;
 
@@ -169,7 +197,13 @@ final class Intelbras {
         long t0 = System.currentTimeMillis();
         HttpURLConnection con = null;
         try {
-            con = (HttpURLConnection) new URL("http", c.ip, c.portaHttp, caminho).openConnection(Proxy.NO_PROXY);
+            con = (HttpURLConnection) new URL(c.https ? "https" : "http", c.ip, c.https ? c.portaHttps : c.portaHttp, caminho)
+                    .openConnection(Proxy.NO_PROXY);
+            if (con instanceof HttpsURLConnection) {
+                // Certificado do gravador é sempre autoassinado. Só chega aqui para IP de rede interna.
+                ((HttpsURLConnection) con).setSSLSocketFactory(TLS_DO_APARELHO);
+                ((HttpsURLConnection) con).setHostnameVerifier((h, sessao) -> h.equals(c.ip));
+            }
             con.setConnectTimeout(TEMPO);
             con.setReadTimeout(TEMPO * 2);
             con.setUseCaches(false);
@@ -178,6 +212,8 @@ final class Intelbras {
             r.status = con.getResponseCode();
             r.www = con.getHeaderField("WWW-Authenticate");
             r.tipo = con.getContentType();
+            r.local = con.getHeaderField("Location");
+            r.servidor = con.getHeaderField("Server");
             r.corpo = ler(r.status >= 400 ? con.getErrorStream() : con.getInputStream(), 8 * 1024 * 1024);
         } catch (Exception e) {
             r.status = 0;
@@ -191,6 +227,26 @@ final class Intelbras {
 
     // GET com autenticação. Guarda o desafio para não errar a senha duas vezes (a Intelbras bloqueia após 5 erros).
     static Resposta get(Cam c, String caminho) {
+        Resposta r = getSemRedirecionar(c, caminho);
+        // Firmware novo costuma mandar a página web para HTTPS (301/302). Segue só se for o mesmo aparelho.
+        if (!c.https && r.status >= 301 && r.status <= 308 && r.local != null) {
+            try {
+                URL destino = new URL(new URL("http", c.ip, c.portaHttp, caminho), r.local);
+                if ("https".equals(destino.getProtocol()) && c.ip.equals(destino.getHost())) {
+                    c.https = true;
+                    c.portaHttps = destino.getPort() > 0 ? destino.getPort() : 443;
+                    c.desafio = null;
+                    r = getSemRedirecionar(c, caminho);
+                    r.redirecionado = destino.toString();
+                }
+            } catch (Exception ignorado) {
+                // Location inválido: fica com a resposta original
+            }
+        }
+        return r;
+    }
+
+    private static Resposta getSemRedirecionar(Cam c, String caminho) {
         String d = c.desafio;
         Resposta r = pedidoHttp(c, caminho, d != null ? autorizacao(d, c, "GET", caminho) : null);
         if (r.status == 401 && r.www != null) {
@@ -229,17 +285,49 @@ final class Intelbras {
         return "";
     }
 
-    private static int contarCanais(Cam c) {
-        Resposta r = get(c, "/cgi-bin/configManager.cgi?action=getConfig&name=ChannelTitle");
-        if (r.status != 200) return 1;
-        int n = 0;
-        for (String k : chaves(r.texto()).keySet()) if (k.matches(".*ChannelTitle\\[\\d+\\]\\.Name$")) n++;
-        return Math.max(n, 1);
+    private static int numero(Map<String, String> m, String sufixo) {
+        for (Map.Entry<String, String> e : m.entrySet()) {
+            if (e.getKey().endsWith(sufixo)) {
+                try { return Integer.parseInt(e.getValue().trim()); } catch (NumberFormatException ignorado) { return 0; }
+            }
+        }
+        return 0;
     }
 
-    private static boolean ehGravador(String classe, String modelo) {
-        return Pattern.compile("DVR|NVR|XVR|HCVR|MHDX|NVD|IVR")
+    // Canais com nome (ChannelTitle). Se o aparelho não tiver essa configuração, conta as entradas de vídeo
+    // locais (DVR) e as remotas (NVR/câmeras IP) e numera "Canal N".
+    static List<JSONObject> lerCanais(Cam c, String nomePadrao) throws JSONException {
+        List<JSONObject> canais = new ArrayList<>();
+        Resposta titulos = get(c, "/cgi-bin/configManager.cgi?action=getConfig&name=ChannelTitle");
+        if (titulos.status == 200) {
+            Pattern pt = Pattern.compile("ChannelTitle\\[(\\d+)\\]\\.Name$");
+            for (Map.Entry<String, String> e : chaves(titulos.texto()).entrySet()) {
+                Matcher m = pt.matcher(e.getKey());
+                if (m.find()) canais.add(new JSONObject().put("canal", Integer.parseInt(m.group(1)) + 1).put("nome", e.getValue()));
+            }
+        }
+        if (canais.isEmpty()) {
+            Resposta locais = get(c, "/cgi-bin/devVideoInput.cgi?action=getCollect");
+            Resposta remotos = get(c, "/cgi-bin/magicBox.cgi?action=getProductDefinition&name=MaxRemoteInputChannels");
+            int n = (locais.status == 200 ? numero(chaves(locais.texto()), "result") : 0)
+                    + (remotos.status == 200 ? numero(chaves(remotos.texto()), "MaxRemoteInputChannels") : 0);
+            n = Math.min(Math.max(n, 1), 128);
+            for (int i = 1; i <= n; i++) {
+                canais.add(new JSONObject().put("canal", i).put("nome", n == 1 && !nomePadrao.isEmpty() ? nomePadrao : "Canal " + i));
+            }
+        }
+        return canais;
+    }
+
+    // Gravador: mais de um canal, ou classe/modelo de gravador (DVR, NVR, XVR, MHDX, NVD, HDCVI, VD...).
+    static boolean ehGravador(String classe, String modelo, int canais) {
+        return canais > 1 || Pattern.compile("DVR|NVR|XVR|HCVR|MHDX|NVD|IVR|HDCVI|MVD|SVR|GRAVADOR|\\bVD\\b")
                 .matcher(classe.toUpperCase(Locale.ROOT) + " " + modelo.toUpperCase(Locale.ROOT)).find();
+    }
+
+    private static String firmware(Cam c) {
+        Resposta r = get(c, "/cgi-bin/magicBox.cgi?action=getSoftwareVersion");
+        return r.status == 200 ? chaves(r.texto()).getOrDefault("version", "") : "";
     }
 
     // Versão rápida da consulta, usada pelo scanner. Devolve null se o IP não parece um aparelho Intelbras.
@@ -258,10 +346,11 @@ final class Intelbras {
         Resposta nomeAp = get(c, "/cgi-bin/magicBox.cgi?action=getMachineName");
         String cl = classe.status == 200 ? chaves(classe.texto()).getOrDefault("class", "") : "";
         String modelo = t.getOrDefault("type", "Intelbras");
-        boolean gravador = ehGravador(cl, modelo);
+        String nome = nomeAp.status == 200 ? chaves(nomeAp.texto()).getOrDefault("name", "") : "";
+        int canais = lerCanais(c, nome).size();
+        boolean gravador = ehGravador(cl, modelo, canais);
         r.put("modelo", modelo).put("gravador", gravador).put("tipo", gravador ? "Gravador" : "Câmera")
-                .put("nome", nomeAp.status == 200 ? chaves(nomeAp.texto()).getOrDefault("name", "") : "")
-                .put("mac", mac(c)).put("canais", gravador ? contarCanais(c) : 1);
+                .put("nome", nome).put("mac", mac(c)).put("canais", gravador ? canais : 1).put("firmware", firmware(c));
         return r.put("situacao", "online");
     }
 
@@ -368,24 +457,13 @@ final class Intelbras {
 
         String modelo = t.containsKey("type") ? t.get("type") : si.getOrDefault("deviceType", "Intelbras");
         String classeTxt = (cl.containsKey("class") ? cl.get("class") : si.getOrDefault("deviceType", "")).toUpperCase(Locale.ROOT);
-        boolean gravador = ehGravador(classeTxt, modelo);
         String nome = no.getOrDefault("name", "");
+        List<JSONObject> canais = lerCanais(c, nome.isEmpty() ? "Canal 1" : nome);
+        boolean gravador = ehGravador(classeTxt, modelo, canais.size());
+        if (!gravador) canais = canais.subList(0, 1);
         r.put("modelo", modelo).put("nome", nome).put("serie", si.getOrDefault("serialNumber", ""))
                 .put("gravador", gravador).put("tipo", gravador ? "Gravador" : "Câmera").put("webMs", tipo.ms)
-                .put("mac", mac(c));
-
-        // Canais: o nome de cada um vem da configuração ChannelTitle.
-        List<JSONObject> canais = new ArrayList<>();
-        Resposta titulos = get(c, "/cgi-bin/configManager.cgi?action=getConfig&name=ChannelTitle");
-        if (titulos.status == 200) {
-            Pattern pt = Pattern.compile("ChannelTitle\\[(\\d+)\\]\\.Name$");
-            for (Map.Entry<String, String> e : chaves(titulos.texto()).entrySet()) {
-                Matcher m = pt.matcher(e.getKey());
-                if (m.find()) canais.add(new JSONObject().put("canal", Integer.parseInt(m.group(1)) + 1).put("nome", e.getValue()));
-            }
-        }
-        if (canais.isEmpty()) canais.add(new JSONObject().put("canal", 1).put("nome", nome.isEmpty() ? "Canal 1" : nome));
-        if (!gravador) canais = canais.subList(0, 1);
+                .put("mac", mac(c)).put("firmware", firmware(c)).put("https", c.https);
 
         int semVideo = 0;
         if (gravador) {
@@ -420,5 +498,77 @@ final class Intelbras {
                 ? "Gravador com " + canais.size() + " canal(is). Toque em uma imagem para ampliar."
                 : "Câmera respondendo. Imagem capturada agora.");
         return r;
+    }
+
+    // ---------- diagnóstico: o que o aparelho responde, para descobrir por que não foi reconhecido ----------
+
+    static final String[] SONDAS = {
+        "/",
+        "/cgi-bin/magicBox.cgi?action=getDeviceType",
+        "/cgi-bin/magicBox.cgi?action=getDeviceClass",
+        "/cgi-bin/magicBox.cgi?action=getSystemInfo",
+        "/cgi-bin/magicBox.cgi?action=getSoftwareVersion",
+        "/cgi-bin/magicBox.cgi?action=getMachineName",
+        "/cgi-bin/configManager.cgi?action=getConfig&name=ChannelTitle",
+        "/cgi-bin/devVideoInput.cgi?action=getCollect",
+        "/cgi-bin/magicBox.cgi?action=getProductDefinition&name=MaxRemoteInputChannels",
+        "/cgi-bin/snapshot.cgi?channel=1",
+        "/cgi-bin/snapshot.cgi?channel=2",
+        "/onvif/device_service",
+    };
+    static final int[] PORTAS_DIAGNOSTICO = {80, 443, 554, 37777, 34567, 8000, 8080, 8899, 9000};
+
+    private static String trecho(Resposta x) {
+        if (x.tipo != null && x.tipo.startsWith("image")) return "[imagem " + x.corpo.length + " bytes]";
+        String t = new String(x.corpo, 0, Math.min(x.corpo.length, 600), StandardCharsets.UTF_8);
+        return t.replaceAll("[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f]", "").trim();
+    }
+
+    // Só o tipo e o realm do desafio (nunca a resposta com senha).
+    private static String desafioResumido(String www) {
+        if (www == null) return "";
+        Matcher m = Pattern.compile("(?i)realm=\"([^\"]*)\"").matcher(www);
+        return www.trim().split("\\s+")[0] + (m.find() ? " realm=\"" + m.group(1) + "\"" : "");
+    }
+
+    static JSONObject diagnostico(Cam c) throws Exception {
+        JSONObject r = new JSONObject().put("ip", c.ip).put("quando", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(new Date()))
+                .put("usuario", c.usuario).put("portaHttp", c.portaHttp).put("portaRtsp", c.portaRtsp);
+        List<Future<JSONObject>> fs = new ArrayList<>();
+        Set<Integer> portas = new java.util.TreeSet<>();
+        for (int p : PORTAS_DIAGNOSTICO) portas.add(p);
+        portas.add(c.portaHttp);
+        portas.add(c.portaRtsp);
+        for (int p : portas) fs.add(PORTAS.submit(() -> tcp(c.ip, p, "", 1500)));
+        JSONArray abertas = new JSONArray();
+        for (Future<JSONObject> f : fs) {
+            JSONObject x = f.get();
+            x.remove("nome");
+            abertas.put(x);
+        }
+        r.put("portas", abertas);
+
+        JSONArray pedidos = new JSONArray();
+        for (String sonda : SONDAS) {
+            Resposta x = get(c, sonda);
+            JSONObject o = new JSONObject().put("caminho", sonda).put("status", x.status).put("ms", x.ms);
+            if (x.erro != null) o.put("erro", x.erro);
+            if (x.tipo != null) o.put("tipo", x.tipo);
+            if (x.servidor != null) o.put("servidor", x.servidor);
+            if (x.redirecionado != null || x.local != null) o.put("redireciona", x.redirecionado != null ? x.redirecionado : x.local);
+            if (x.www != null) o.put("desafio", desafioResumido(x.www));
+            if (c.https) o.put("https", true);
+            o.put("trecho", trecho(x));
+            pedidos.put(o);
+            if (x.status == 401 && c.desafio != null) {
+                r.put("parou", "Senha recusada: parei aqui para não bloquear o usuário (a Intelbras bloqueia após 5 erros).");
+                break;
+            }
+            if (x.status == 0 && "/".equals(sonda)) {
+                r.put("parou", "A página web não respondeu.");
+                break;
+            }
+        }
+        return r.put("pedidos", pedidos);
     }
 }

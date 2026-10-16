@@ -19,8 +19,16 @@ public class TesteIntelbras {
         r.put("idCamera", IntelbrasPonte.identificar("127.0.0.41", "senha123"));
         r.put("idSenhaErrada", IntelbrasPonte.identificar("127.0.0.30", "errada"));
         r.put("idNada", String.valueOf(IntelbrasPonte.identificar("127.0.0.99", "x")));
+        r.put("diagSenhaErrada", IntelbrasPonte.diagnostico("127.0.0.30", "errada-diag"));
         r.put("idImpostor", String.valueOf(IntelbrasPonte.identificar("127.0.0.50", "senha123")));
         r.put("imagem", IntelbrasPonte.imagem("127.0.0.20", "senha123", 1));
+        r.put("dvrAntigo", IntelbrasPonte.consultar("127.0.0.60", "senha123"));
+        r.put("nvrHttps", IntelbrasPonte.consultar("127.0.0.70", "senha123"));
+        r.put("idDvrAntigo", IntelbrasPonte.identificar("127.0.0.60", "senha123"));
+        r.put("idNvrHttps", IntelbrasPonte.identificar("127.0.0.70", "senha123"));
+        r.put("imagemNvrHttps", IntelbrasPonte.imagem("127.0.0.70", "senha123", 3));
+        r.put("diagCamera", IntelbrasPonte.diagnostico("127.0.0.20", "senha123"));
+        r.put("diagNvrHttps", IntelbrasPonte.diagnostico("127.0.0.70", "senha123"));
         System.out.println(r.toString());
         System.exit(0); // o Intelbras.java mantém threads de espera abertas
     }

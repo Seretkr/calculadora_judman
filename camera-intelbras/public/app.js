@@ -71,6 +71,7 @@ $('form-teste').addEventListener('submit', async (e) => {
     guardarRecente(pedido.ip, pedido.usuario);
     desenharResultado(r.dados, $('resultado'), {
       cadastrar: NATIVO ? () => abrirCadastro(null, { ...pedido, consulta: r.dados }) : null,
+      pedido,
     });
   } catch {
     $('resultado').replaceChildren(el('div', { class: 'cartao' },
@@ -82,7 +83,7 @@ $('form-teste').addEventListener('submit', async (e) => {
 });
 
 // Desenha o resultado de uma consulta. Usado na aba Testar e no detalhe do dispositivo.
-function desenharResultado(r, destino, { cadastrar, titulo } = {}) {
+function desenharResultado(r, destino, { cadastrar, titulo, pedido } = {}) {
   const info = el('dl', { class: 'info' });
   const linha = (k, v) => { if (v) info.append(el('dt', {}, k), el('dd', {}, String(v))); };
   linha('Tipo', r.tipo);
@@ -90,6 +91,8 @@ function desenharResultado(r, destino, { cadastrar, titulo } = {}) {
   linha('Nome', r.nome);
   linha('Nº de série', r.serie);
   linha('MAC', r.mac);
+  linha('Firmware', r.firmware);
+  if (r.https) linha('Página web', 'HTTPS');
   if (r.rtsp && r.rtsp.ok) linha('Vídeo', `${r.rtsp.codec} · ${r.rtsp.ms} ms`);
   if (r.rtsp && r.rtsp.ok) linha('Link RTSP', r.rtsp.url);
   linha('Testado em', new Date(r.quando).toLocaleString('pt-BR'));
@@ -104,7 +107,9 @@ function desenharResultado(r, destino, { cadastrar, titulo } = {}) {
     info.children.length ? info : null,
     portas,
     r.avisos && r.avisos.length ? el('ul', { class: 'avisos' }, ...r.avisos.map((a) => el('li', {}, a))) : null,
-    cadastrar && r.token ? el('button', { type: 'button', class: 'principal espaco', onclick: cadastrar }, 'Cadastrar este dispositivo') : null);
+    cadastrar && r.token ? el('button', { type: 'button', class: 'principal espaco', onclick: cadastrar }, 'Cadastrar este dispositivo') : null,
+    pedido ? el('button', { type: 'button', class: 'link espaco', onclick: () => abrirDiagnostico(pedido) },
+      r.situacao === 'online' ? 'Diagnóstico técnico' : 'Não reconheceu? Gerar diagnóstico técnico') : null);
 
   const partes = [cartao];
   if (r.canais && r.token) {
@@ -118,3 +123,52 @@ function desenharResultado(r, destino, { cadastrar, titulo } = {}) {
   }
   destino.replaceChildren(...partes);
 }
+
+// ---------- diagnóstico técnico ----------
+
+function textoDiagnostico(d) {
+  const l = [`Diagnóstico Olho Intelbras · ${d.ip} · ${d.quando}`, `Usuário: ${d.usuario} · porta web ${d.portaHttp} · RTSP ${d.portaRtsp}`, '', 'Portas:'];
+  for (const p of d.portas || []) l.push(`  ${String(p.porta).padEnd(6)} ${p.ok ? `aberta (${p.ms} ms)` : p.erro}`);
+  l.push('', 'Respostas:');
+  for (const p of d.pedidos || []) {
+    l.push(`  ${p.caminho}`);
+    l.push(`    ${p.status || 'sem resposta'}${p.erro ? ' · ' + p.erro : ''} · ${p.ms} ms${p.https ? ' · https' : ''}${p.tipo ? ' · ' + p.tipo : ''}`);
+    if (p.servidor) l.push(`    servidor: ${p.servidor}`);
+    if (p.redireciona) l.push(`    redireciona: ${p.redireciona}`);
+    if (p.desafio) l.push(`    pede: ${p.desafio}`);
+    if (p.trecho) l.push(...p.trecho.split(/\r?\n/).slice(0, 12).map((x) => '    | ' + x));
+  }
+  if (d.parou) l.push('', d.parou);
+  return l.join('\n');
+}
+
+let diagnosticoAtual = '';
+
+async function abrirDiagnostico(pedido) {
+  $('diag-texto').textContent = `Testando ${pedido.ip}… (leva alguns segundos)`;
+  $('diag-status').textContent = '';
+  diagnosticoAtual = '';
+  abrirTela('tela-diagnostico', 'Diagnóstico · ' + pedido.ip);
+  const r = await api('/api/diagnostico', pedido);
+  diagnosticoAtual = r.ok ? textoDiagnostico(r.dados) : r.dados.erro || 'Falha no diagnóstico.';
+  $('diag-texto').textContent = diagnosticoAtual;
+}
+
+$('diag-compartilhar').hidden = !NATIVO;
+$('diag-compartilhar').addEventListener('click', () => {
+  if (!diagnosticoAtual) return;
+  NATIVO.compartilhar(`diagnostico-${Date.now()}.txt`, diagnosticoAtual);
+});
+$('diag-copiar').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(diagnosticoAtual);
+    $('diag-status').textContent = 'Copiado.';
+  } catch {
+    const s = window.getSelection();
+    const faixa = document.createRange();
+    faixa.selectNodeContents($('diag-texto'));
+    s.removeAllRanges();
+    s.addRange(faixa);
+    $('diag-status').textContent = 'Texto selecionado: toque em Copiar no menu do celular.';
+  }
+});
