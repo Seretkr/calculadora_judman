@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Abrir pedido no Elétrica OS</title>
+  <style>
+    body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f172a; color:#fff; min-height:100vh; display:flex; align-items:center; justify-content:center; padding: 20px; box-sizing: border-box; }
+    .caixa { max-width: 420px; width:100%; text-align:center; }
+    .raio { font-size: 52px; color:#facc15; }
+    h1 { font-size: 22px; margin: 8px 0; }
+    .resumo { background:#1e293b; border-radius: 14px; padding: 14px; text-align:left; margin: 16px 0; font-size: 15px; line-height: 1.5; }
+    .btn { display:block; background:#facc15; color:#0f172a; font-weight:800; text-decoration:none; padding: 16px; border-radius: 14px; font-size: 17px; border: 0; width: 100%; font-family: inherit; }
+    .btn.sec { background:#334155; color:#fff; margin-top: 10px; font-size: 15px; padding: 12px; }
+    p { color:#94a3b8; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="caixa">
+    <div class="raio">⚡</div>
+    <h1>Novo pedido de serviço</h1>
+    <div class="resumo" id="resumo">Carregando…</div>
+    <a class="btn" id="abrir" href="#">Abrir no app Elétrica OS</a>
+    <button class="btn sec" id="copiar" type="button">Copiar pedido</button>
+    <p>Se o app não abrir, toque em “Copiar pedido” e use <b>📥 Importar pedido</b> dentro do app.</p>
+  </div>
+  <script>
+  'use strict';
+  (function () {
+    var d = new URLSearchParams(location.search).get('d') || '';
+    var esc = function (s) { return String(s || '').replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); };
+    var resumo = document.getElementById('resumo');
+    try {
+      var b = d.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
+      var bin = atob(b), bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      var p = JSON.parse(new TextDecoder().decode(bytes));
+      resumo.innerHTML = '<b>' + esc(p.c.n) + '</b><br>' + esc(p.c.t) + '<br>' +
+        esc([p.c.e, p.c.b, p.c.ci].filter(Boolean).join(', ')) + '<br><br>🔧 ' + esc(p.s.tp) +
+        (p.s.d ? '<br>📝 ' + esc(p.s.d) : '');
+    } catch (e) {
+      resumo.textContent = 'Pedido inválido ou incompleto.';
+    }
+    var intent = 'intent://import?d=' + d + '#Intent;scheme=eletricaos;package=br.com.judman.eletricaos;end';
+    var direto = 'eletricaos://import?d=' + d;
+    var abrir = document.getElementById('abrir');
+    abrir.href = /android/i.test(navigator.userAgent) ? intent : direto;
+    document.getElementById('copiar').addEventListener('click', function () {
+      var t = location.href;
+      if (navigator.clipboard) navigator.clipboard.writeText(t).then(function () { alert('Pedido copiado!'); });
+      else prompt('Copie o link:', t);
+    });
+  })();
+  </script>
+</body>
+</html>

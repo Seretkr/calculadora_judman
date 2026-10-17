@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Solicitar serviço elétrico</title>
+  <meta name="description" content="Abra uma ordem de serviço elétrico em poucos segundos.">
+  <style>
+    :root { --navy:#0f172a; --navy-2:#1e293b; --amarelo:#facc15; --fundo:#f1f5f9; --linha:#e2e8f0; --suave:#64748b; --vermelho:#dc2626; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--fundo); color: var(--navy); font-size: 16px; line-height: 1.45; }
+    header { background: var(--navy); color:#fff; padding: 26px 18px 54px; text-align:center; }
+    header .raio { font-size: 38px; color: var(--amarelo); }
+    header h1 { margin: 6px 0 4px; font-size: 22px; }
+    header p { margin: 0; color:#cbd5e1; font-size: 15px; }
+    main { max-width: 560px; margin: -36px auto 0; padding: 0 14px 40px; }
+    .card { background:#fff; border-radius: 16px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(15,23,42,.08); }
+    .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--suave); margin: 0 0 12px; }
+    label { display:block; margin-bottom: 12px; }
+    label > span { display:block; font-size: 14px; font-weight: 600; margin-bottom: 5px; }
+    input, select, textarea { width:100%; font: inherit; border:1px solid var(--linha); background:#f8fafc; border-radius: 12px; padding: 12px; outline: none; }
+    input:focus, textarea:focus, select:focus { border-color:#eab308; background:#fff; box-shadow: 0 0 0 3px rgba(250,204,21,.3); }
+    textarea { min-height: 100px; resize: vertical; }
+    .linha { display:flex; gap: 10px; } .linha > * { flex:1; min-width:0; }
+    .tipos { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .tipo { border:1px solid var(--linha); background:#fff; border-radius: 12px; padding: 10px; font: inherit; font-size: 14px; text-align:left; display:flex; gap:8px; align-items:center; }
+    .tipo b { font-size: 20px; }
+    .tipo.ativo { border-color: var(--navy); background: var(--navy); color:#fff; }
+    .urg { display:flex; gap: 8px; margin-bottom: 12px; }
+    .urg button { flex:1; border:1px solid var(--linha); background:#fff; border-radius: 12px; padding: 10px 4px; font: inherit; font-size: 14px; font-weight: 600; }
+    .urg button.ativo { background: var(--navy); color: #fff; border-color: var(--navy); }
+    .urg button.ativo[data-v=emergencia] { background: var(--vermelho); border-color: var(--vermelho); }
+    .enviar { width:100%; border:0; border-radius: 14px; padding: 16px; font: inherit; font-weight: 800; font-size: 17px; background:#25d366; color:#fff; box-shadow: 0 6px 16px rgba(37,211,102,.35); }
+    .nota { color: var(--suave); font-size: 13px; text-align:center; margin-top: 10px; }
+    .erro { color: var(--vermelho); font-size: 14px; margin: -4px 0 10px; display:none; }
+    .ok { text-align:center; padding: 28px 16px; }
+    .ok .big { font-size: 54px; }
+    .oculto { display:none; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="raio">⚡</div>
+    <h1 id="titulo">Solicitar serviço elétrico</h1>
+    <p id="sub">Preencha abaixo e envie pelo WhatsApp. Leva menos de 1 minuto.</p>
+  </header>
+
+  <main>
+    <div id="invalido" class="card oculto">
+      <b>Link incompleto.</b> Peça ao seu eletricista o link de atendimento atualizado.
+    </div>
+
+    <form id="form" class="oculto" novalidate>
+      <div class="card">
+        <h2>Qual o serviço?</h2>
+        <div class="tipos" id="tipos"></div>
+        <label><span>Descreva o problema</span>
+          <textarea name="d" placeholder="Ex.: o disjuntor do chuveiro desarma toda vez que ligo no quente"></textarea></label>
+        <span style="display:block;font-size:14px;font-weight:600;margin-bottom:5px">Urgência</span>
+        <div class="urg" id="urg">
+          <button type="button" data-v="normal" class="ativo">Normal</button>
+          <button type="button" data-v="urgente">Urgente</button>
+          <button type="button" data-v="emergencia">⚠️ Emergência</button>
+        </div>
+        <label><span>Melhor dia / horário</span><input name="p" placeholder="Ex.: sábado pela manhã"></label>
+      </div>
+
+      <div class="card">
+        <h2>Seus dados</h2>
+        <label><span>Nome *</span><input name="n" autocomplete="name" required></label>
+        <label><span>WhatsApp *</span><input name="t" type="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required></label>
+        <label><span>Endereço *</span><input name="e" autocomplete="street-address" placeholder="Rua, número, apto" required></label>
+        <div class="linha">
+          <label><span>Bairro</span><input name="b"></label>
+          <label><span>Cidade</span><input name="ci" autocomplete="address-level2"></label>
+        </div>
+        <label><span>Ponto de referência</span><input name="r"></label>
+      </div>
+
+      <div class="erro" id="erro">Preencha nome, WhatsApp, endereço e o tipo de serviço.</div>
+      <button class="enviar" type="submit">Enviar pedido pelo WhatsApp</button>
+      <p class="nota">Depois de enviar, mande também fotos do local na mesma conversa — ajuda a agilizar o orçamento.</p>
+    </form>
+
+    <div id="enviado" class="card ok oculto">
+      <div class="big">✅</div>
+      <h2 style="text-transform:none;font-size:20px;color:var(--navy);letter-spacing:0">Quase lá!</h2>
+      <p>Confirme o envio da mensagem no WhatsApp. Se possível, mande fotos do local logo em seguida.</p>
+      <p class="nota"><a href="#" id="reenviar">Não abriu o WhatsApp? Toque aqui.</a></p>
+    </div>
+  </main>
+
+  <script>
+  'use strict';
+  (function () {
+    var TIPOS = [
+      ['🔌', 'Tomadas e interruptores'], ['🚿', 'Chuveiro / resistência'],
+      ['🗄️', 'Quadro de distribuição / disjuntores'], ['⚠️', 'Falta de energia / curto-circuito'],
+      ['💡', 'Iluminação / luminárias'], ['🌀', 'Ventilador de teto'],
+      ['🔧', 'Instalação de equipamentos'], ['🏠', 'Padrão de entrada / medidor'],
+      ['⏚', 'Aterramento / DPS'], ['🧵', 'Fiação nova / reforma'],
+      ['📋', 'Laudo / inspeção'], ['➕', 'Outro']
+    ];
+    var q = new URLSearchParams(location.search);
+    var whats = (q.get('w') || '').replace(/\D/g, '');
+    var nomeProf = q.get('n') || '';
+    var tipo = '', urg = 'normal', urlWhats = '';
+    var $ = function (s) { return document.querySelector(s); };
+
+    if (whats.length < 10) { $('#invalido').classList.remove('oculto'); return; }
+    if (nomeProf) {
+      $('#titulo').textContent = nomeProf;
+      document.title = 'Solicitar serviço — ' + nomeProf;
+    }
+    $('#form').classList.remove('oculto');
+
+    $('#tipos').innerHTML = TIPOS.map(function (t) {
+      return '<button type="button" class="tipo" data-v="' + t[1] + '"><b>' + t[0] + '</b>' + t[1] + '</button>';
+    }).join('');
+    $('#tipos').addEventListener('click', function (e) {
+      var b = e.target.closest('.tipo'); if (!b) return;
+      tipo = b.dataset.v;
+      document.querySelectorAll('.tipo').forEach(function (x) { x.classList.toggle('ativo', x === b); });
+    });
+    $('#urg').addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      urg = b.dataset.v;
+      document.querySelectorAll('#urg button').forEach(function (x) { x.classList.toggle('ativo', x === b); });
+    });
+
+    // lembra os dados de quem já pediu antes
+    var form = $('#form');
+    try {
+      var salvo = JSON.parse(localStorage.getItem('eos_cliente') || '{}');
+      ['n', 't', 'e', 'b', 'ci', 'r'].forEach(function (k) { if (salvo[k]) form.elements[k].value = salvo[k]; });
+    } catch (e) {}
+
+    function codificar(obj) {
+      var bytes = new TextEncoder().encode(JSON.stringify(obj)), bin = '';
+      for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var v = function (k) { return form.elements[k].value.trim(); };
+      if (!v('n') || v('t').replace(/\D/g, '').length < 10 || !v('e') || !tipo) {
+        $('#erro').style.display = 'block'; return;
+      }
+      $('#erro').style.display = 'none';
+      var c = { n: v('n'), t: v('t'), e: v('e'), b: v('b'), ci: v('ci'), r: v('r') };
+      try { localStorage.setItem('eos_cliente', JSON.stringify(c)); } catch (e2) {}
+      var pedido = {
+        v: 1, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), t: Date.now(),
+        c: c, s: { tp: tipo, d: v('d'), u: urg, p: v('p') }
+      };
+      var base = location.href.replace(/[?#].*$/, '').replace(/index\.html$/, '');
+      var link = base + 'abrir.html?d=' + codificar(pedido);
+      var rotUrg = { normal: 'Normal', urgente: 'URGENTE', emergencia: '⚠️ EMERGÊNCIA' }[urg];
+      var msg = [
+        '⚡ *Novo pedido de serviço elétrico*', '',
+        '👤 ' + c.n, '📞 ' + c.t,
+        '📍 ' + [c.e, c.b, c.ci].filter(Boolean).join(', ') + (c.r ? ' (ref.: ' + c.r + ')' : ''), '',
+        '🔧 *' + tipo + '*' + (urg !== 'normal' ? ' — ' + rotUrg : ''),
+        v('d') ? '📝 ' + v('d') : null,
+        v('p') ? '🕒 Preferência: ' + v('p') : null, '',
+        'Abrir no app Elétrica OS:', link
+      ].filter(function (l) { return l !== null; }).join('\n');
+      urlWhats = 'https://wa.me/' + whats + '?text=' + encodeURIComponent(msg);
+      form.classList.add('oculto');
+      $('#enviado').classList.remove('oculto');
+      window.scrollTo(0, 0);
+      location.href = urlWhats;
+    });
+    $('#reenviar').addEventListener('click', function (e) { e.preventDefault(); if (urlWhats) location.href = urlWhats; });
+  })();
+  </script>
+</body>
+</html>
