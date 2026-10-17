@@ -49,11 +49,12 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         Window w = getWindow();
-        w.setStatusBarColor(Color.parseColor("#0F172A"));
-        w.setNavigationBarColor(Color.parseColor("#0F172A"));
+        w.setStatusBarColor(Color.parseColor("#1B1B87"));
+        w.setNavigationBarColor(Color.parseColor("#F4F6F8"));
+        if (Build.VERSION.SDK_INT >= 26) w.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
 
         web = new WebView(this);
-        web.setBackgroundColor(Color.parseColor("#F1F5F9"));
+        web.setBackgroundColor(Color.parseColor("#F4F6F8"));
         setContentView(web);
 
         WebSettings s = web.getSettings();

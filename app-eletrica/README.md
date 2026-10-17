@@ -1,6 +1,6 @@
 # ⚡ Elétrica OS
 
-App Android para eletricistas gerenciarem ordens de serviço (OS).
+App Android para eletricistas gerenciarem ordens de serviço (OS). O visual segue o design system **Kit de Cotação** (cabeçalho `brand`, seções em formato de pacote, itens numerados, valores em `eco`).
 
 ## Como funciona
 

@@ -88,13 +88,13 @@ function whatsapp(tel, texto) {
 
 // ============================================================ constantes
 const STATUS = [
-  { id: 'nova', nome: 'Nova', cor: '#2563eb' },
-  { id: 'agendada', nome: 'Agendada', cor: '#7c3aed' },
-  { id: 'orcamento', nome: 'Orçamento enviado', cor: '#d97706' },
-  { id: 'aprovada', nome: 'Aprovada', cor: '#0d9488' },
-  { id: 'andamento', nome: 'Em andamento', cor: '#0284c7' },
-  { id: 'concluida', nome: 'Concluída', cor: '#16a34a' },
-  { id: 'cancelada', nome: 'Cancelada', cor: '#64748b' },
+  { id: 'nova', nome: 'Nova', tom: 'brand' },
+  { id: 'agendada', nome: 'Agendada', tom: 'brand' },
+  { id: 'orcamento', nome: 'Orçamento enviado', tom: 'neutro' },
+  { id: 'aprovada', nome: 'Aprovada', tom: 'eco' },
+  { id: 'andamento', nome: 'Em andamento', tom: 'brand' },
+  { id: 'concluida', nome: 'Concluída', tom: 'eco' },
+  { id: 'cancelada', nome: 'Cancelada', tom: 'neutro' },
 ];
 const statusDe = (id) => STATUS.find((s) => s.id === id) || STATUS[0];
 const ABERTAS = ['nova', 'agendada', 'orcamento', 'aprovada', 'andamento'];
@@ -291,11 +291,36 @@ function render() {
   return telaInicio();
 }
 
-function topo(titulo, voltar, extra = '') {
+function topo(titulo, voltar, extra = '', meta = '') {
   return `<header class="topo">
-    ${voltar ? `<button class="icone" data-a="voltar" aria-label="Voltar">←</button>` : ''}
-    <h1>${titulo}</h1>${extra}
+    <div class="topo-linha">
+      ${voltar ? `<button class="topo-btn" data-a="voltar">Voltar</button>` : ''}
+      <h1>${titulo}</h1>${extra}
+    </div>
+    ${meta ? `<div class="topo-meta">${meta}</div>` : ''}
   </header>`;
+}
+
+// card no formato "pacote" do Kit de Cotação: topo, corpo e rodapé opcionais
+function pacote(titulo, corpo, { sub = '', acao = '', rodape = '', eco = false } = {}) {
+  return `<section class="pacote ${eco ? 'eco' : ''}">
+    <div class="pacote-topo"><div><div class="pacote-titulo">${titulo}</div>${sub ? `<div class="pacote-sub">${sub}</div>` : ''}</div>${acao}</div>
+    <div class="pacote-corpo">${corpo}</div>
+    ${rodape ? `<div class="pacote-rodape">${rodape}</div>` : ''}
+  </section>`;
+}
+
+function itemLinha(n, rotulo, nome, cond, preco, extra = '', cor = '') {
+  return `<li class="item">
+    <span class="item-num ${cor}">${n}</span>
+    <div class="item-txt">
+      ${rotulo ? `<div class="item-rotulo">${rotulo}</div>` : ''}
+      <div class="item-nome">${nome}</div>
+      ${cond ? `<div class="item-cond">${cond}</div>` : ''}
+      ${extra}
+    </div>
+    <div class="item-preco">${preco}</div>
+  </li>`;
 }
 
 // ============================================================ tela inicial
@@ -334,32 +359,32 @@ function telaInicio() {
     ...STATUS.map((s) => [s.id, s.nome])];
 
   app.innerHTML = `
-    ${topo('<span class="raio">⚡</span> Elétrica OS', false, `
-      <button class="icone" data-a="importar" aria-label="Importar pedido">📥</button>
-      <button class="icone" data-a="config" aria-label="Configurações">⚙️</button>`)}
+    ${topo('Elétrica OS', false, `
+      <button class="topo-btn" data-a="importar">Importar</button>
+      <button class="topo-btn" data-a="config">Ajustes</button>`,
+    `${esc(cfg.nome || 'Ordens de serviço')} &nbsp;|&nbsp; ${abertas.length} em aberto`)}
+    <section class="faixa-info">
+      <div><span class="rot">Abertas</span><b>${abertas.length}</b></div>
+      <div><span class="rot">Hoje</span><b>${hoje.length}</b></div>
+      <div><span class="rot">A receber</span><b class="dinheiro">${brl(aReceber)}</b></div>
+      <div><span class="rot">Recebido no mês</span><b class="dinheiro">${brl(recebidoMes)}</b></div>
+    </section>
     <main class="conteudo">
-      <section class="painel">
-        <div class="kpi"><small>OS abertas</small><b>${abertas.length}</b></div>
-        <div class="kpi"><small>Agendadas hoje</small><b>${hoje.length}</b></div>
-        <div class="kpi destaque"><small>A receber</small><b>${brl(aReceber)}</b></div>
-        <div class="kpi"><small>Recebido no mês</small><b>${brl(recebidoMes)}</b></div>
-      </section>
+      ${!cfg.whats ? `<div class="aviso"><b>Primeiro passo:</b> em Ajustes, informe seu nome, seu WhatsApp e o valor da sua hora.
+        Depois envie o seu link para os clientes abrirem chamados.</div>` : ''}
 
-      ${!cfg.whats ? `<div class="dica"><b>Comece por aqui:</b> abra as ⚙️ Configurações, coloque seu nome e WhatsApp e
-        defina o valor da sua hora. Depois é só enviar o seu link para os clientes abrirem chamados.</div>` : ''}
-
-      <div class="botoes" style="margin-bottom:12px">
-        <button class="btn whats" data-a="enviar-link">📲 Enviar link</button>
-        <button class="btn claro" data-a="importar">📥 Importar pedido</button>
+      <div class="botoes">
+        <button class="btn eco" data-a="enviar-link">Enviar link ao cliente</button>
+        <button class="btn sec" data-a="importar">Importar pedido</button>
       </div>
 
-      <input type="search" id="busca" placeholder="Buscar cliente, endereço, nº…" value="${esc(busca)}" style="margin-bottom:10px">
+      <input type="search" id="busca" placeholder="Buscar cliente, endereço ou nº da OS" value="${esc(busca)}">
       <div class="chips">${filtros.map(([id, nome]) => `<button class="chip ${filtro === id ? 'ativo' : ''}" data-a="filtro" data-v="${id}">${nome}</button>`).join('')}</div>
 
-      ${lista.length ? lista.map(itemOS).join('') : `<div class="card vazio" style="text-align:center">
-        ${ordens.length ? 'Nenhuma OS neste filtro.' : 'Nenhuma ordem de serviço ainda.<br>Toque em <b>+</b> para criar ou envie seu link para clientes.'}</div>`}
+      <div class="lista">${lista.length ? lista.map(itemOS).join('') : `<div class="vazio-card">
+        ${ordens.length ? 'Nenhuma OS neste filtro.' : 'Nenhuma ordem de serviço ainda. Toque em <b>Nova OS</b> ou envie seu link para clientes.'}</div>`}</div>
     </main>
-    <button class="fab" data-a="nova" aria-label="Nova OS">+</button>`;
+    <button class="fab" data-a="nova">+ Nova OS</button>`;
 
   const inp = $('#busca');
   inp.addEventListener('input', () => {
@@ -370,19 +395,22 @@ function telaInicio() {
   });
 }
 
+function badgeStatus(id) {
+  const st = statusDe(id);
+  return `<span class="badge st-${st.tom}">${st.nome}</span>`;
+}
+
 function itemOS(o) {
-  const st = statusDe(o.status);
   const t = calcular(o);
   const urg = o.servico.urgencia && o.servico.urgencia !== 'normal'
-    ? `<span class="badge tag-urg">${URGENCIA[o.servico.urgencia]}</span>` : '';
-  const timer = o.timer ? '<span class="badge tag-timer">⏱ em atendimento</span>' : '';
-  const pago = o.pagamento.pago ? '<span class="badge" style="--cor:#16a34a">Pago</span>' : '';
-  return `<a class="os-item" href="#/os/${o.id}" style="--cor:${st.cor}">
-    <div class="l1"><span class="nome">${esc(o.cliente.nome || 'Sem nome')}</span><span class="num">${numeroOS(o.numero)}</span></div>
-    <div class="l2">${esc(o.servico.tipo || 'Serviço não informado')}${o.cliente.bairro ? ' · ' + esc(o.cliente.bairro) : ''}</div>
-    <div class="l2">${o.agendamento ? '📅 ' + dataHora(o.agendamento) : 'Aberta em ' + data(o.criadoEm)}</div>
-    <div class="l3"><span><span class="badge" style="--cor:${st.cor}">${st.nome}</span> ${urg} ${timer} ${pago}</span>
-      <span class="total">${t.total ? brl(t.total) : ''}</span></div>
+    ? `<span class="badge st-urg">${URGENCIA[o.servico.urgencia]}</span>` : '';
+  const timer = o.timer ? '<span class="badge st-brand">Em atendimento</span>' : '';
+  const pago = o.pagamento.pago ? '<span class="badge st-eco">Pago</span>' : '';
+  return `<a class="os-item" href="#/os/${o.id}">
+    <div class="os-l1"><span class="item-rotulo">OS ${numeroOS(o.numero)}</span><span class="item-rotulo">${o.agendamento ? 'Visita ' + dataHora(o.agendamento) : 'Aberta em ' + data(o.criadoEm)}</span></div>
+    <div class="os-l2"><span class="item-nome">${esc(o.cliente.nome || 'Sem nome')}</span><span class="item-preco">${t.total ? brl(t.total) : ''}</span></div>
+    <div class="item-cond">${esc(o.servico.tipo || 'Serviço não informado')}${o.cliente.bairro ? ' | ' + esc(o.cliente.bairro) : ''}</div>
+    <div class="os-badges">${badgeStatus(o.status)} ${urg} ${timer} ${pago}</div>
   </a>`;
 }
 
@@ -392,57 +420,59 @@ async function telaOS(id) {
   if (!os) { ir('#/'); return; }
   const fotos = await fotosDa(id);
   fotos.sort((a, b) => a.em - b.em);
-  const st = statusDe(os.status);
   const c = os.cliente, s = os.servico;
   const endereco = [c.endereco, c.bairro, c.cidade].filter(Boolean).join(', ');
+  const t = calcular(os);
+
+  const horas = os.horas.length ? `<ul class="itens">${os.horas.map((h, i) => itemLinha(i + 1, 'Mão de obra',
+    esc(h.descricao || 'Atendimento'), `${data(h.data)} | ${hm(h.minutos)} x ${brl(h.valorHora)}/h`,
+    brl(h.minutos / 60 * num(h.valorHora)), `<button class="link-rm" data-a="del-hora" data-v="${h.id}">Remover</button>`)).join('')}</ul>`
+    : '<p class="vazio">Nenhuma hora lançada. Use o cronômetro no local ou lance manualmente.</p>';
+
+  const mats = os.materiais.length ? `<ul class="itens">${os.materiais.map((m, i) => itemLinha(i + 1, m.doCliente ? 'Fornecido pelo cliente' : 'Material',
+    esc(m.nome), `${fmtNum(m.qtd)} x ${brl(m.valor)}`, m.doCliente ? '—' : brl(num(m.qtd) * num(m.valor)),
+    `<button class="link-rm" data-a="del-mat" data-v="${m.id}">Remover</button>`, 'eco')).join('')}</ul>`
+    : '<p class="vazio">Nenhum material lançado.</p>';
 
   app.innerHTML = `
-    ${topo(`OS ${numeroOS(os.numero)}`, true, `<button class="icone" data-a="menu-os" aria-label="Mais opções">⋮</button>`)}
+    ${topo(esc(c.nome || 'Sem nome'), true, `<button class="topo-btn" data-a="menu-os">Mais</button>`,
+      `OS ${numeroOS(os.numero)} &nbsp;|&nbsp; ${statusDe(os.status).nome}`)}
+    <section class="faixa-info dupla">
+      <div><span class="rot">Telefone</span>${c.telefone ? esc(fmtTel(c.telefone)) : '—'}</div>
+      <div><span class="rot">Serviço</span>${esc(s.tipo || '—')}</div>
+      <div class="larga"><span class="rot">Endereço</span>${esc(endereco || '—')}${c.referencia ? ` (ref.: ${esc(c.referencia)})` : ''}</div>
+    </section>
     <main class="conteudo">
-      <div class="card">
-        <h2>Status</h2>
-        <div class="chips wrap">${STATUS.map((x) => `<button class="chip status ${x.id === os.status ? 'ativo' : ''}" style="--cor:${x.cor}" data-a="status" data-v="${x.id}">${x.nome}</button>`).join('')}</div>
-        <label class="campo"><span>📅 Visita / execução agendada</span>
-          <input type="datetime-local" data-f="agendamento" value="${paraInputDT(os.agendamento)}"></label>
+      <div class="botoes tres">
+        <button class="btn sec" data-a="ligar" ${c.telefone ? '' : 'disabled'}>Ligar</button>
+        <button class="btn eco" data-a="whats" ${c.telefone ? '' : 'disabled'}>WhatsApp</button>
+        <button class="btn sec" data-a="mapa" ${endereco ? '' : 'disabled'}>Mapa</button>
       </div>
 
-      <div class="card">
-        <h2>Cliente <button class="link acao" data-a="editar">Editar</button></h2>
-        <div class="info-linha"><span class="ico">👤</span><span class="txt"><b>${esc(c.nome || 'Sem nome')}</b></span></div>
-        ${c.telefone ? `<div class="info-linha"><span class="ico">📞</span><span class="txt">${esc(fmtTel(c.telefone))}</span></div>` : ''}
-        ${endereco ? `<div class="info-linha"><span class="ico">📍</span><span class="txt">${esc(endereco)}${c.referencia ? `<br><small>Ref.: ${esc(c.referencia)}</small>` : ''}</span></div>` : ''}
-        <div class="botoes" style="margin-top:8px; grid-template-columns: repeat(3,1fr)">
-          <button class="btn claro peq" data-a="ligar" ${c.telefone ? '' : 'disabled'}>📞 Ligar</button>
-          <button class="btn whats peq" data-a="whats" ${c.telefone ? '' : 'disabled'}>💬 WhatsApp</button>
-          <button class="btn claro peq" data-a="mapa" ${endereco ? '' : 'disabled'}>🗺️ Mapa</button>
-        </div>
-      </div>
+      ${pacote('Status', `
+        <div class="chips wrap">${STATUS.map((x) => `<button class="chip ${x.id === os.status ? 'ativo' : ''}" data-a="status" data-v="${x.id}">${x.nome}</button>`).join('')}</div>
+        <label class="campo"><span>Visita / execução agendada</span>
+          <input type="datetime-local" data-f="agendamento" value="${paraInputDT(os.agendamento)}"></label>`,
+      { sub: os.agendamento ? 'Agendada para ' + dataHora(os.agendamento) : 'Sem data marcada' })}
 
-      <div class="card">
-        <h2>Serviço solicitado</h2>
-        <div class="info-linha"><span class="ico">🔧</span><span class="txt"><b>${esc(s.tipo || 'Não informado')}</b>
-          ${s.urgencia && s.urgencia !== 'normal' ? ` <span class="badge tag-urg">${URGENCIA[s.urgencia]}</span>` : ''}</span></div>
-        ${s.descricao ? `<div class="info-linha"><span class="ico">📝</span><span class="txt">${esc(s.descricao).replace(/\n/g, '<br>')}</span></div>` : ''}
-        ${s.preferencia ? `<div class="info-linha"><span class="ico">🕒</span><span class="txt">Preferência: ${esc(s.preferencia)}</span></div>` : ''}
-        <label class="campo" style="margin-top:8px"><span>Diagnóstico técnico (o que você encontrou)</span>
-          <textarea data-f="diagnostico" placeholder="Ex.: disjuntor subdimensionado, fiação aquecida no circuito do chuveiro…">${esc(os.diagnostico)}</textarea></label>
-      </div>
+      ${pacote('Serviço solicitado', `
+        ${s.urgencia && s.urgencia !== 'normal' ? `<p><span class="badge st-urg">${URGENCIA[s.urgencia]}</span></p>` : ''}
+        ${s.descricao ? `<p class="texto">${esc(s.descricao).replace(/\n/g, '<br>')}</p>` : '<p class="vazio">Sem descrição do cliente.</p>'}
+        ${s.preferencia ? `<p class="item-cond">Preferência de horário: ${esc(s.preferencia)}</p>` : ''}
+        <label class="campo"><span>Diagnóstico técnico</span>
+          <textarea data-f="diagnostico" placeholder="O que você encontrou no local. Ex.: disjuntor subdimensionado no circuito do chuveiro.">${esc(os.diagnostico)}</textarea></label>`,
+      { sub: esc(s.tipo || 'Tipo não informado'), acao: '<button class="link" data-a="editar">Editar</button>' })}
 
-      <div class="card">
-        <h2>⏱ Mão de obra</h2>
+      ${pacote('Mão de obra', `
         <div class="timer">
-          <div><small>${os.timer ? 'Atendimento em andamento desde ' + dataHora(os.timer.inicio).slice(11) : 'Cronômetro do atendimento'}</small>
-            <span class="tempo ${os.timer ? 'rodando' : ''}" id="tempo">${os.timer ? cronometro(os.timer.inicio) : '00:00:00'}</span></div>
-          <button class="btn ${os.timer ? 'perigo' : 'amarelo'}" data-a="timer">${os.timer ? '■ Parar' : '▶ Iniciar'}</button>
+          <div><div class="item-rotulo">${os.timer ? 'Em atendimento desde ' + dataHora(os.timer.inicio).slice(11) : 'Cronômetro do atendimento'}</div>
+            <div class="tempo ${os.timer ? 'rodando' : ''}" id="tempo">${os.timer ? cronometro(os.timer.inicio) : '00:00:00'}</div></div>
+          <button class="btn ${os.timer ? 'perigo' : ''}" data-a="timer">${os.timer ? 'Parar' : 'Iniciar'}</button>
         </div>
-        ${os.horas.length ? `<ul class="itens">${os.horas.map((h) => `<li>
-          <div class="desc">${esc(h.descricao || 'Mão de obra')}<small>${data(h.data)} · ${hm(h.minutos)} × ${brl(h.valorHora)}/h</small></div>
-          <span class="valor">${brl(h.minutos / 60 * num(h.valorHora))}</span>
-          <button class="x" data-a="del-hora" data-v="${h.id}" aria-label="Remover">✕</button></li>`).join('')}</ul>`
-          : '<div class="vazio">Nenhuma hora lançada. Use o cronômetro ou lance manualmente.</div>'}
+        ${horas}
         <details>
-          <summary class="link">+ Lançar horas manualmente</summary>
-          <div style="margin-top:10px">
+          <summary class="link">Lançar horas manualmente</summary>
+          <div class="form-inline">
             <label class="campo"><span>Descrição</span><input type="text" id="h-desc" placeholder="Ex.: Troca do quadro"></label>
             <div class="linha">
               <label class="campo"><span>Horas</span><input type="text" inputmode="numeric" id="h-h" placeholder="0"></label>
@@ -451,75 +481,62 @@ async function telaOS(id) {
             </div>
             <button class="btn bloco" data-a="add-hora">Adicionar horas</button>
           </div>
-        </details>
-      </div>
+        </details>`,
+      { sub: `${hm(t.minutos)} lançadas`, rodape: `<span class="rot">Subtotal mão de obra</span><b>${brl(t.maoObra)}</b>` })}
 
-      <div class="card">
-        <h2>🧰 Materiais e equipamentos</h2>
-        ${os.materiais.length ? `<ul class="itens">${os.materiais.map((m) => `<li>
-          <div class="desc">${esc(m.nome)}<small>${fmtNum(m.qtd)} × ${brl(m.valor)}${m.doCliente ? ' · fornecido pelo cliente' : ''}</small></div>
-          <span class="valor">${m.doCliente ? '—' : brl(num(m.qtd) * num(m.valor))}</span>
-          <button class="x" data-a="del-mat" data-v="${m.id}" aria-label="Remover">✕</button></li>`).join('')}</ul>`
-          : '<div class="vazio">Nenhum material lançado.</div>'}
-        <label class="campo"><span>Item</span><input type="text" id="m-nome" list="catalogo" placeholder="Ex.: Disjuntor 20A"></label>
-        <datalist id="catalogo">${catalogo().map((i) => `<option value="${esc(i.nome)}">${i.valor ? brl(i.valor) : ''}</option>`).join('')}</datalist>
-        <div class="linha">
-          <label class="campo estreito"><span>Qtd</span><input type="text" inputmode="decimal" id="m-qtd" value="1"></label>
-          <label class="campo"><span>Valor unitário (R$)</span><input type="text" inputmode="decimal" id="m-valor" placeholder="0,00"></label>
-        </div>
-        <label class="check"><input type="checkbox" id="m-cliente"> Fornecido pelo cliente (não soma no total)</label>
-        <button class="btn bloco" data-a="add-mat">Adicionar item</button>
-      </div>
+      ${pacote('Materiais e equipamentos', `
+        ${mats}
+        <div class="form-inline">
+          <label class="campo"><span>Item</span><input type="text" id="m-nome" list="catalogo" placeholder="Ex.: Disjuntor 20A"></label>
+          <datalist id="catalogo">${catalogo().map((i) => `<option value="${esc(i.nome)}">${i.valor ? brl(i.valor) : ''}</option>`).join('')}</datalist>
+          <div class="linha">
+            <label class="campo estreito"><span>Qtd</span><input type="text" inputmode="decimal" id="m-qtd" value="1"></label>
+            <label class="campo"><span>Valor unitário (R$)</span><input type="text" inputmode="decimal" id="m-valor" placeholder="0,00"></label>
+          </div>
+          <label class="check"><input type="checkbox" id="m-cliente"> Fornecido pelo cliente (não soma no total)</label>
+          <button class="btn bloco" data-a="add-mat">Adicionar item</button>
+        </div>`,
+      { sub: `${os.materiais.length} ${os.materiais.length === 1 ? 'item' : 'itens'}`, rodape: `<span class="rot">Subtotal materiais</span><b>${brl(t.materiais)}</b>` })}
 
-      <div class="card">
-        <h2>📷 Fotos do local (${fotos.length})</h2>
+      ${pacote('Fotos do local', `
         ${fotos.length ? `<div class="fotos">${fotos.map((f) => `<button data-a="ver-foto" data-v="${f.id}">
-          <img src="${f.data}" alt="">${f.legenda ? `<span class="leg">${esc(f.legenda)}</span>` : ''}</button>`).join('')}</div>`
-          : '<div class="vazio">Registre o antes, o durante e o depois do serviço.</div>'}
+          <img src="${f.data}" alt="${esc(f.legenda || 'Foto do local')}">${f.legenda ? `<span class="leg">${esc(f.legenda)}</span>` : ''}</button>`).join('')}</div>`
+          : '<p class="vazio">Registre o antes, o durante e o depois do serviço.</p>'}
         <div class="botoes">
-          <button class="btn amarelo" data-a="foto-camera">📷 Tirar foto</button>
-          <button class="btn claro" data-a="foto-galeria">🖼️ Galeria</button>
+          <button class="btn" data-a="foto-camera">Tirar foto</button>
+          <button class="btn sec" data-a="foto-galeria">Galeria</button>
         </div>
         <input type="file" accept="image/*" capture="environment" id="in-camera" class="oculto">
         <input type="file" accept="image/*" multiple id="in-galeria" class="oculto">
-        <label class="check"><input type="checkbox" data-f="fotosNoPdf" ${os.fotosNoPdf ? 'checked' : ''}> Incluir fotos no orçamento em PDF</label>
-      </div>
+        <label class="check"><input type="checkbox" data-f="fotosNoPdf" ${os.fotosNoPdf ? 'checked' : ''}> Incluir fotos no orçamento em PDF</label>`,
+      { sub: `${fotos.length} ${fotos.length === 1 ? 'foto' : 'fotos'}` })}
 
-      <div class="card">
-        <h2>💰 Valores</h2>
+      ${pacote('Orçamento', `
         <div class="linha">
           <label class="campo"><span>Deslocamento (R$)</span><input type="text" inputmode="decimal" data-f="deslocamento" value="${fmtNum(os.deslocamento)}"></label>
           <label class="campo"><span>Desconto (R$)</span><input type="text" inputmode="decimal" data-f="desconto" value="${fmtNum(os.desconto)}"></label>
         </div>
         <label class="campo"><span>Observações no orçamento</span>
-          <textarea data-f="observacoes" placeholder="Condições, prazo de execução, o que não está incluso…">${esc(os.observacoes)}</textarea></label>
+          <textarea data-f="observacoes" placeholder="Condições, prazo de execução, o que não está incluso">${esc(os.observacoes)}</textarea></label>
         <div class="resumo" id="resumo">${resumoHTML(os)}</div>
-      </div>
+        <div class="botoes um">
+          <button class="btn eco" data-a="enviar-orc">Enviar orçamento pelo WhatsApp</button>
+        </div>
+        <div class="botoes">
+          <button class="btn" data-a="doc-orc">Orçamento em PDF</button>
+          <button class="btn sec" data-a="doc-rec">Recibo em PDF</button>
+        </div>`,
+      { eco: true, sub: `Válido por ${cfg.validadeDias || 7} dias`, rodape: `<span class="rot">Custo total do serviço</span><b class="total" id="total-rodape">${brl(t.total)}</b>` })}
 
-      <div class="card">
-        <h2>💳 Pagamento</h2>
+      ${pacote('Pagamento', `
         <label class="check"><input type="checkbox" data-f="pagamento.pago" ${os.pagamento.pago ? 'checked' : ''}> Serviço pago
-          ${os.pagamento.pago && os.pagamento.em ? `<small style="color:var(--suave)">em ${data(os.pagamento.em)}</small>` : ''}</label>
+          ${os.pagamento.pago && os.pagamento.em ? `<small class="item-cond">em ${data(os.pagamento.em)}</small>` : ''}</label>
         <label class="campo"><span>Forma de pagamento</span>
           <select data-f="pagamento.forma">${['', 'PIX', 'Dinheiro', 'Cartão de débito', 'Cartão de crédito', 'Transferência', 'Boleto']
-            .map((f) => `<option ${os.pagamento.forma === f ? 'selected' : ''} value="${f}">${f || 'Selecione…'}</option>`).join('')}</select></label>
-      </div>
+            .map((f) => `<option ${os.pagamento.forma === f ? 'selected' : ''} value="${f}">${f || 'Selecione'}</option>`).join('')}</select></label>`,
+      { sub: os.pagamento.pago ? 'Pago' : 'Pendente' })}
 
-      <div class="card">
-        <h2>Enviar ao cliente</h2>
-        <div class="botoes um">
-          <button class="btn whats" data-a="enviar-orc">💬 Enviar orçamento pelo WhatsApp</button>
-        </div>
-        <div class="botoes" style="margin-top:8px">
-          <button class="btn" data-a="doc-orc">📄 Orçamento PDF</button>
-          <button class="btn verde" data-a="doc-rec">🧾 Recibo PDF</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Histórico</h2>
-        <ul class="hist">${os.historico.slice().reverse().map((h) => `<li>${esc(h.texto)}<small>${dataHora(h.em)}</small></li>`).join('')}</ul>
-      </div>
+      ${pacote('Histórico', `<ul class="hist">${os.historico.slice().reverse().map((h) => `<li>${esc(h.texto)}<small>${dataHora(h.em)}</small></li>`).join('')}</ul>`)}
     </main>`;
 
   app.dataset.os = id;
@@ -543,11 +560,10 @@ function resumoHTML(os) {
   const t = calcular(os);
   return `
     <div class="ln"><span>Mão de obra (${hm(t.minutos)})</span><b>${brl(t.maoObra)}</b></div>
-    ${t.minimoAplicado ? `<div class="obs">Aplicado valor mínimo de visita (${brl(cfg.visitaMinima)})</div>` : ''}
+    ${t.minimoAplicado ? `<div class="item-cond">Aplicado o valor mínimo de visita (${brl(cfg.visitaMinima)})</div>` : ''}
     <div class="ln"><span>Materiais</span><b>${brl(t.materiais)}</b></div>
     <div class="ln"><span>Deslocamento</span><b>${brl(t.desloc)}</b></div>
-    ${t.desc ? `<div class="ln"><span>Desconto</span><b>− ${brl(t.desc)}</b></div>` : ''}
-    <div class="ln total"><span>Total</span><span>${brl(t.total)}</span></div>`;
+    ${t.desc ? `<div class="ln"><span>Desconto</span><b>- ${brl(t.desc)}</b></div>` : ''}`;
 }
 
 function catalogo() {
@@ -597,8 +613,8 @@ async function adicionarFotos(os, arquivos) {
   if (n) {
     registrar(os, `${n} foto(s) adicionada(s)`);
     await salvarOS(os);
-    toast(`${n} foto(s) salva(s)`);
-  } else toast('Não consegui ler a imagem');
+    toast(n === 1 ? 'Foto salva' : `${n} fotos salvas`);
+  } else toast('Não foi possível ler a imagem. Tente outra foto.');
   telaOS(os.id);
 }
 
@@ -611,8 +627,8 @@ async function verFoto(os, fotoId) {
     <label class="campo"><span>Legenda</span><input type="text" id="f-leg" value="${esc(f.legenda)}" placeholder="Ex.: Quadro antes da troca"></label>
     <div class="chips wrap">${['Antes', 'Durante', 'Depois', 'Problema encontrado', 'Quadro', 'Medidor'].map((l) => `<button class="chip" data-leg="${l}">${l}</button>`).join('')}</div>
     <div class="botoes">
-      <button class="btn perigo" id="f-del">🗑 Excluir</button>
-      <button class="btn" id="f-ok">Salvar</button>
+      <button class="btn perigo" id="f-del">Excluir foto</button>
+      <button class="btn" id="f-ok">Salvar legenda</button>
     </div>`);
   $$('[data-leg]').forEach((b) => b.addEventListener('click', () => { $('#f-leg').value = b.dataset.leg; }));
   $('#f-ok').addEventListener('click', async () => {
@@ -635,36 +651,36 @@ function textoOrcamento(os) {
   const t = calcular(os);
   const c = os.cliente;
   const L = [];
-  L.push(`⚡ *ORÇAMENTO ${numeroOS(os.numero)}*`);
-  if (cfg.nome) L.push(`*${cfg.nome}*`);
+  L.push(`*ORÇAMENTO DE SERVIÇO ELÉTRICO*`);
+  L.push(`Código: ${numeroOS(os.numero).slice(1)}${cfg.nome ? ' | ' + cfg.nome : ''}`);
   L.push('');
   L.push(`Cliente: ${c.nome}`);
   const end = [c.endereco, c.bairro].filter(Boolean).join(', ');
   if (end) L.push(`Local: ${end}`);
   if (os.servico.tipo) L.push(`Serviço: ${os.servico.tipo}`);
-  if (os.diagnostico) { L.push(''); L.push(`🔎 *Diagnóstico:* ${os.diagnostico}`); }
+  if (os.diagnostico) { L.push(''); L.push(`*Diagnóstico:* ${os.diagnostico}`); }
   L.push('');
-  L.push(`🔧 *Mão de obra* (${hm(t.minutos)}): ${brl(t.maoObra)}`);
-  os.horas.forEach((h) => L.push(`  • ${h.descricao || 'Serviço'} — ${hm(h.minutos)}`));
+  L.push(`*MÃO DE OBRA* (${hm(t.minutos)}): ${brl(t.maoObra)}`);
+  os.horas.forEach((h, i) => L.push(`${i + 1}. ${h.descricao || 'Atendimento'} | ${hm(h.minutos)}`));
   const mats = os.materiais.filter((m) => !m.doCliente);
   if (mats.length) {
     L.push('');
-    L.push(`🧰 *Materiais:* ${brl(t.materiais)}`);
-    mats.forEach((m) => L.push(`  • ${fmtNum(m.qtd)}x ${m.nome} — ${brl(num(m.qtd) * num(m.valor))}`));
+    L.push(`*MATERIAIS:* ${brl(t.materiais)}`);
+    mats.forEach((m, i) => L.push(`${i + 1}. ${fmtNum(m.qtd)}x ${m.nome} | ${brl(num(m.qtd) * num(m.valor))}`));
   }
   const doCli = os.materiais.filter((m) => m.doCliente);
-  if (doCli.length) L.push(`  (Fornecido pelo cliente: ${doCli.map((m) => m.nome).join(', ')})`);
-  if (t.desloc) L.push(`🚗 Deslocamento: ${brl(t.desloc)}`);
-  if (t.desc) L.push(`🏷️ Desconto: − ${brl(t.desc)}`);
+  if (doCli.length) L.push(`Fornecido pelo cliente: ${doCli.map((m) => m.nome).join(', ')}`);
   L.push('');
-  L.push(`💰 *TOTAL: ${brl(t.total)}*`);
-  if (os.observacoes) { L.push(''); L.push(`📝 ${os.observacoes}`); }
+  if (t.desloc) L.push(`Deslocamento: ${brl(t.desloc)}`);
+  if (t.desc) L.push(`Desconto: - ${brl(t.desc)}`);
+  L.push(`*CUSTO TOTAL: ${brl(t.total)}*`);
+  if (os.observacoes) { L.push(''); L.push(`Observações: ${os.observacoes}`); }
   L.push('');
   L.push(`Orçamento válido por ${cfg.validadeDias || 7} dias.`);
   if (cfg.garantia) L.push(cfg.garantia);
   if (cfg.pix) L.push(`PIX: ${cfg.pix}`);
   L.push('');
-  L.push('Posso confirmar o serviço? 👍');
+  L.push('Por favor, avalie e confirme se podemos seguir com o serviço.');
   return L.join('\n');
 }
 
@@ -672,10 +688,10 @@ function menuOS(os) {
   abrirModal(`
     <h3>OS ${numeroOS(os.numero)}</h3>
     <div class="botoes um">
-      <button class="btn claro" data-m="editar">✏️ Editar cliente e serviço</button>
-      <button class="btn claro" data-m="duplicar">📋 Duplicar OS (mesmo cliente)</button>
-      <button class="btn claro" data-m="copiar">📄 Copiar texto do orçamento</button>
-      <button class="btn perigo" data-m="excluir">🗑 Excluir OS</button>
+      <button class="btn sec" data-m="editar">Editar cliente e serviço</button>
+      <button class="btn sec" data-m="duplicar">Duplicar OS para o mesmo cliente</button>
+      <button class="btn sec" data-m="copiar">Copiar texto do orçamento</button>
+      <button class="btn perigo" data-m="excluir">Excluir OS</button>
       <button class="btn" data-m="fechar">Fechar</button>
     </div>`);
   $$('[data-m]').forEach((b) => b.addEventListener('click', async () => {
@@ -707,11 +723,10 @@ function telaEditar(id) {
   const c = os ? os.cliente : { cidade: cfg.cidade || '' };
   const s = os ? os.servico : { urgencia: 'normal' };
   app.innerHTML = `
-    ${topo(os ? `Editar ${numeroOS(os.numero)}` : 'Nova OS', true)}
+    ${topo(os ? `Editar OS ${numeroOS(os.numero)}` : 'Nova OS', true, '', 'Dados do cliente e do serviço')}
     <main class="conteudo">
-      <form id="form-os">
-        <div class="card">
-          <h2>Cliente</h2>
+      <form id="form-os" class="pilha">
+        ${pacote('Cliente', `
           <label class="campo"><span>Nome *</span><input type="text" name="nome" required value="${esc(c.nome)}" autocomplete="off"></label>
           <label class="campo"><span>Telefone / WhatsApp</span><input type="tel" name="telefone" value="${esc(c.telefone)}" placeholder="(11) 99999-9999"></label>
           <label class="campo"><span>Endereço</span><input type="text" name="endereco" value="${esc(c.endereco)}" placeholder="Rua, número, complemento"></label>
@@ -719,19 +734,16 @@ function telaEditar(id) {
             <label class="campo"><span>Bairro</span><input type="text" name="bairro" value="${esc(c.bairro)}"></label>
             <label class="campo"><span>Cidade</span><input type="text" name="cidade" value="${esc(c.cidade)}"></label>
           </div>
-          <label class="campo"><span>Ponto de referência</span><input type="text" name="referencia" value="${esc(c.referencia)}"></label>
-        </div>
-        <div class="card">
-          <h2>Serviço</h2>
+          <label class="campo"><span>Ponto de referência</span><input type="text" name="referencia" value="${esc(c.referencia)}"></label>`)}
+        ${pacote('Serviço', `
           <label class="campo"><span>Tipo de serviço</span>
-            <select name="tipo"><option value="">Selecione…</option>${TIPOS.map((t) => `<option ${s.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}
+            <select name="tipo"><option value="">Selecione</option>${TIPOS.map((t) => `<option ${s.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}
             ${s.tipo && !TIPOS.includes(s.tipo) ? `<option selected>${esc(s.tipo)}</option>` : ''}</select></label>
           <label class="campo"><span>Descrição do problema</span><textarea name="descricao">${esc(s.descricao)}</textarea></label>
           <label class="campo"><span>Urgência</span>
             <select name="urgencia">${Object.entries(URGENCIA).map(([k, v]) => `<option value="${k}" ${s.urgencia === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-          <label class="campo"><span>Melhor dia / horário</span><input type="text" name="preferencia" value="${esc(s.preferencia)}" placeholder="Ex.: sábado de manhã"></label>
-        </div>
-        <button class="btn amarelo bloco" type="submit">${os ? 'Salvar alterações' : 'Criar OS'}</button>
+          <label class="campo"><span>Melhor dia / horário</span><input type="text" name="preferencia" value="${esc(s.preferencia)}" placeholder="Ex.: sábado de manhã"></label>`)}
+        <button class="btn bloco" type="submit">${os ? 'Salvar alterações' : 'Criar OS'}</button>
       </form>
     </main>`;
 
@@ -743,12 +755,13 @@ function telaEditar(id) {
     Object.assign(alvo.servico, { tipo: f.tipo, descricao: f.descricao.trim(), urgencia: f.urgencia, preferencia: f.preferencia.trim() });
     if (os) registrar(alvo, 'Dados do cliente/serviço editados');
     await salvarOS(alvo);
-    toast(os ? 'Salvo' : `OS ${numeroOS(alvo.numero)} criada`);
+    toast(os ? 'Alterações salvas' : `OS ${numeroOS(alvo.numero)} criada`);
     ir(`#/os/${alvo.id}`);
   });
 }
 
 // ============================================================ documento PDF
+// segue o QuoteEmail do Kit de Cotação: cabeçalho brand, faixa de dados, pacote com itens numerados e total
 async function telaDoc(id, tipo) {
   const os = acharOS(id);
   if (!os) { ir('#/'); return; }
@@ -758,82 +771,76 @@ async function telaDoc(id, tipo) {
   const fotos = (!recibo && os.fotosNoPdf) ? (await fotosDa(id)).sort((a, b) => a.em - b.em) : [];
   const titulo = `${recibo ? 'Recibo' : 'Orçamento'} ${numeroOS(os.numero)}`;
   const validade = new Date(Date.now() + (num(cfg.validadeDias) || 7) * 864e5);
+  let n = 0;
+  const linhas = [
+    ...os.horas.map((h) => `<tr><td class="d-num"><span>${++n}</span></td>
+      <td><div class="d-rot">Mão de obra</div><div class="d-nome">${esc(h.descricao || 'Atendimento')}</div>
+        <div class="d-cond">${data(h.data)} | ${hm(h.minutos)} x ${brl(h.valorHora)}/h</div></td>
+      <td class="d-preco">${brl(h.minutos / 60 * num(h.valorHora))}</td></tr>`),
+    ...os.materiais.map((m) => `<tr><td class="d-num"><span>${++n}</span></td>
+      <td><div class="d-rot">${m.doCliente ? 'Fornecido pelo cliente' : 'Material'}</div><div class="d-nome">${esc(m.nome)}</div>
+        <div class="d-cond">${fmtNum(m.qtd)} x ${m.doCliente ? '—' : brl(m.valor)}</div></td>
+      <td class="d-preco">${m.doCliente ? '—' : brl(num(m.qtd) * num(m.valor))}</td></tr>`),
+  ];
 
   app.innerHTML = `
     <div class="doc-barra">
-      <button class="btn claro" data-a="voltar">← Voltar</button>
-      <button class="btn amarelo" data-a="imprimir" data-v="${esc(titulo)}">🖨️ Salvar PDF / Imprimir</button>
+      <button class="btn sec" data-a="voltar">Voltar</button>
+      <button class="btn" data-a="imprimir" data-v="${esc(titulo)}">Salvar PDF / Imprimir</button>
     </div>
     <article class="doc">
-      <div class="cab">
-        <div>
-          <div class="marca"><span class="raio">⚡</span> ${esc(cfg.nome || 'Serviços Elétricos')}</div>
-          ${cfg.documento ? `<div>CPF/CNPJ: ${esc(cfg.documento)}</div>` : ''}
-          ${cfg.whats ? `<div>WhatsApp: ${esc(fmtTel(cfg.whats))}</div>` : ''}
-          ${cfg.cidade ? `<div>${esc(cfg.cidade)}</div>` : ''}
+      <div class="d-cab">
+        <div class="d-titulo">${recibo ? 'Recibo de Serviço Elétrico' : 'Orçamento de Serviço Elétrico'}</div>
+        <div class="d-meta">Código: ${numeroOS(os.numero).slice(1)} &nbsp;|&nbsp; Emitido em ${data(Date.now())}${recibo ? '' : ` &nbsp;|&nbsp; Válido até ${data(validade)}`}</div>
+      </div>
+      <div class="d-info">
+        <div><b>Cliente:</b> ${esc(c.nome)}</div>
+        <div><b>Telefone:</b> ${esc(fmtTel(c.telefone) || '—')}</div>
+        <div class="d-sec"><b>Local:</b> ${esc([c.endereco, c.bairro, c.cidade].filter(Boolean).join(', ') || '—')}</div>
+        <div class="d-sec"><b>Serviço:</b> ${esc(os.servico.tipo || '—')}</div>
+      </div>
+      <div class="d-corpo">
+        ${os.diagnostico || os.servico.descricao ? `<p class="d-lead">${os.diagnostico ? `<b>Diagnóstico:</b> ${esc(os.diagnostico).replace(/\n/g, '<br>')}` : esc(os.servico.descricao).replace(/\n/g, '<br>')}</p>` : ''}
+        <div class="d-pacote">
+          <div class="d-pac-topo">
+            ${recibo && os.pagamento.pago ? '<div class="d-badge">Pago</div>' : ''}
+            <div class="d-pac-tit">${recibo ? 'Serviços executados' : 'Serviços e materiais'}</div>
+            <div class="d-pac-sub">${n} ${n === 1 ? 'item' : 'itens'} | Mão de obra ${hm(t.minutos)}</div>
+          </div>
+          <table class="d-itens">${linhas.join('') || '<tr><td colspan="3" class="d-cond">Nenhum item lançado.</td></tr>'}</table>
+          <div class="d-pac-rodape">
+            <div class="d-sub-ln"><span>Mão de obra${t.minimoAplicado ? ' (valor mínimo de visita)' : ''}</span><span>${brl(t.maoObra)}</span></div>
+            <div class="d-sub-ln"><span>Materiais</span><span>${brl(t.materiais)}</span></div>
+            ${t.desloc ? `<div class="d-sub-ln"><span>Deslocamento</span><span>${brl(t.desloc)}</span></div>` : ''}
+            ${t.desc ? `<div class="d-sub-ln"><span>Desconto</span><span>- ${brl(t.desc)}</span></div>` : ''}
+            <div class="d-tot-rot">${recibo ? 'Valor recebido' : 'Custo total do serviço'}</div>
+            <div class="d-total">${brl(t.total)}</div>
+          </div>
         </div>
-        <div class="tit"><b>${recibo ? 'RECIBO' : 'ORÇAMENTO'}</b>
-          Nº ${numeroOS(os.numero).slice(1)}<br>Emitido em ${data(Date.now())}
-          ${recibo ? '' : `<br>Válido até ${data(validade)}`}</div>
+
+        ${recibo ? `<p class="d-lead">Recebi de <b>${esc(c.nome)}</b> a importância de <b>${brl(t.total)}</b> referente aos serviços elétricos descritos acima${os.pagamento.forma ? `, pagos via <b>${esc(os.pagamento.forma)}</b>` : ''}${os.pagamento.em ? ` em ${data(os.pagamento.em)}` : ''}.</p>` : ''}
+        ${os.observacoes ? `<p class="d-cond"><b>Observações:</b> ${esc(os.observacoes).replace(/\n/g, '<br>')}</p>` : ''}
+        ${cfg.garantia ? `<p class="d-cond">${esc(cfg.garantia)}</p>` : ''}
+        ${cfg.pix && !recibo ? `<p class="d-cond">Pagamento via PIX: <b>${esc(cfg.pix)}</b></p>` : ''}
+
+        ${fotos.length ? `<div class="d-rot d-fotos-tit">Registro fotográfico</div>
+          <div class="d-fotos">${fotos.map((f) => `<figure><img src="${f.data}" alt=""><figcaption>${esc(f.legenda)}</figcaption></figure>`).join('')}</div>` : ''}
+
+        <div class="d-assin">
+          <div>${esc(cfg.nome || 'Responsável técnico')}${cfg.documento ? '<br>CPF/CNPJ ' + esc(cfg.documento) : ''}</div>
+          <div>${recibo ? 'Cliente' : 'De acordo: ' + esc(c.nome)}</div>
+        </div>
+        <div class="d-rodape">${esc(cfg.nome || 'Serviços elétricos')}${cfg.whats ? ' | WhatsApp ' + esc(fmtTel(cfg.whats)) : ''}${cfg.cidade ? ' | ' + esc(cfg.cidade) : ''}</div>
       </div>
-
-      <h4>Cliente</h4>
-      <div><b>${esc(c.nome)}</b>${c.telefone ? ' · ' + esc(fmtTel(c.telefone)) : ''}</div>
-      <div>${esc([c.endereco, c.bairro, c.cidade].filter(Boolean).join(', '))}</div>
-
-      <h4>Serviço</h4>
-      <div><b>${esc(os.servico.tipo || '')}</b></div>
-      ${os.servico.descricao ? `<div>${esc(os.servico.descricao).replace(/\n/g, '<br>')}</div>` : ''}
-      ${os.diagnostico ? `<div style="margin-top:6px"><b>Diagnóstico:</b> ${esc(os.diagnostico).replace(/\n/g, '<br>')}</div>` : ''}
-
-      ${os.horas.length ? `<h4>Mão de obra</h4>
-      <table><tr><th>Descrição</th><th class="n">Tempo</th><th class="n">R$/h</th><th class="n">Subtotal</th></tr>
-        ${os.horas.map((h) => `<tr><td>${esc(h.descricao || 'Mão de obra')}<br><small>${data(h.data)}</small></td><td class="n">${hm(h.minutos)}</td>
-          <td class="n">${brl(h.valorHora)}</td><td class="n">${brl(h.minutos / 60 * num(h.valorHora))}</td></tr>`).join('')}
-        ${t.minimoAplicado ? `<tr><td colspan="3">Valor mínimo de visita aplicado</td><td class="n">${brl(t.maoObra)}</td></tr>` : ''}
-      </table>` : ''}
-
-      ${os.materiais.length ? `<h4>Materiais e equipamentos</h4>
-      <table><tr><th>Item</th><th class="n">Qtd</th><th class="n">Unit.</th><th class="n">Subtotal</th></tr>
-        ${os.materiais.map((m) => `<tr><td>${esc(m.nome)}${m.doCliente ? ' <small>(fornecido pelo cliente)</small>' : ''}</td>
-          <td class="n">${fmtNum(m.qtd)}</td><td class="n">${m.doCliente ? '—' : brl(m.valor)}</td>
-          <td class="n">${m.doCliente ? '—' : brl(num(m.qtd) * num(m.valor))}</td></tr>`).join('')}
-      </table>` : ''}
-
-      <div class="totais">
-        <div><span>Mão de obra</span><span>${brl(t.maoObra)}</span></div>
-        <div><span>Materiais</span><span>${brl(t.materiais)}</span></div>
-        ${t.desloc ? `<div><span>Deslocamento</span><span>${brl(t.desloc)}</span></div>` : ''}
-        ${t.desc ? `<div><span>Desconto</span><span>− ${brl(t.desc)}</span></div>` : ''}
-        <div class="g"><span>TOTAL</span><span>${brl(t.total)}</span></div>
-      </div>
-
-      ${recibo ? `<h4>Declaração</h4>
-        <div>Recebi de <b>${esc(c.nome)}</b> a importância de <b>${brl(t.total)}</b> referente aos serviços elétricos descritos acima
-        ${os.pagamento.forma ? `, pagos via <b>${esc(os.pagamento.forma)}</b>` : ''}${os.pagamento.em ? ` em ${data(os.pagamento.em)}` : ''}.</div>` : ''}
-
-      ${os.observacoes ? `<h4>Observações</h4><div>${esc(os.observacoes).replace(/\n/g, '<br>')}</div>` : ''}
-      ${(cfg.garantia || cfg.pix) ? `<h4>Condições</h4>
-        ${cfg.garantia ? `<div>${esc(cfg.garantia)}</div>` : ''}
-        ${cfg.pix && !recibo ? `<div>Pagamento via PIX: <b>${esc(cfg.pix)}</b></div>` : ''}` : ''}
-
-      ${fotos.length ? `<h4>Registro fotográfico</h4>
-        <div class="fotos-doc">${fotos.map((f) => `<figure><img src="${f.data}" alt=""><figcaption>${esc(f.legenda)}</figcaption></figure>`).join('')}</div>` : ''}
-
-      <div class="assin">
-        <div>${esc(cfg.nome || 'Responsável técnico')}</div>
-        <div>${recibo ? 'Cliente' : 'De acordo — ' + esc(c.nome)}</div>
-      </div>
-      <div class="rodape">Documento gerado pelo app Elétrica OS · ${dataHora(Date.now())}</div>
     </article>`;
 }
 
 // ============================================================ configurações
 function telaConfig() {
   app.innerHTML = `
-    ${topo('Configurações', true)}
+    ${topo('Ajustes', true, '', 'Seus dados, preços e link para clientes')}
     <main class="conteudo">
-      <form id="form-cfg">
+      <form id="form-cfg" class="pilha">
         <div class="card">
           <h2>Seus dados</h2>
           <label class="campo"><span>Nome / empresa</span><input type="text" name="nome" value="${esc(cfg.nome)}" placeholder="Ex.: João Eletricista"></label>
@@ -863,15 +870,15 @@ function telaConfig() {
           <div class="mono" id="link-prev">${esc(linkCliente())}</div>
           <p class="vazio">O cliente abre o link, preenche o pedido e ele chega no seu WhatsApp. Toque no link da mensagem para criar a OS aqui no app.</p>
         </div>
-        <button class="btn amarelo bloco" type="submit">Salvar configurações</button>
+        <button class="btn bloco" type="submit">Salvar ajustes</button>
       </form>
 
-      <div class="card" style="margin-top:12px">
+      <div class="card">
         <h2>Backup</h2>
         <p class="vazio">Os dados ficam só neste celular. Faça backup de vez em quando (inclui fotos).</p>
         <div class="botoes">
-          <button class="btn claro" data-a="backup">💾 Exportar</button>
-          <button class="btn claro" data-a="restaurar">📂 Restaurar</button>
+          <button class="btn sec" data-a="backup">Exportar backup</button>
+          <button class="btn sec" data-a="restaurar">Restaurar backup</button>
         </div>
         <input type="file" id="in-backup" accept="application/json,.json" class="oculto">
       </div>
@@ -883,7 +890,7 @@ function telaConfig() {
     ['valorHora', 'visitaMinima', 'deslocamento', 'validadeDias'].forEach((k) => { f[k] = num(f[k]); });
     Object.assign(cfg, f);
     salvarCfg();
-    toast('Configurações salvas');
+    toast('Ajustes salvos');
     ir('#/');
   });
   $('#in-backup').addEventListener('change', (e) => restaurar(e.target.files[0]));
@@ -927,21 +934,21 @@ async function restaurar(arquivo) {
 // ============================================================ importar
 function telaImportar() {
   app.innerHTML = `
-    ${topo('Importar pedido', true)}
+    ${topo('Importar pedido', true, '', 'Crie a OS a partir da mensagem do cliente')}
     <main class="conteudo">
-      <div class="dica">Quando o cliente preenche o seu link, chega uma mensagem no seu WhatsApp com um link
-        <b>“Abrir no app”</b>. Toque nele e a OS é criada sozinha.<br><br>
+      <div class="aviso">Quando o cliente preenche o seu link, chega uma mensagem no seu WhatsApp com um link
+        <b>Abrir no app Elétrica OS</b>. Toque nele e a OS é criada sozinha.<br><br>
         Se preferir, copie a mensagem inteira do WhatsApp e cole aqui embaixo.</div>
       <div class="card">
         <label class="campo"><span>Mensagem do cliente</span><textarea id="txt-imp" style="min-height:160px" placeholder="Cole aqui a mensagem recebida"></textarea></label>
-        <button class="btn amarelo bloco" data-a="fazer-import">📥 Criar OS a partir da mensagem</button>
+        <button class="btn bloco" data-a="fazer-import">Criar OS a partir da mensagem</button>
       </div>
       <div class="card">
         <h2>Seu link para clientes</h2>
         <div class="mono">${esc(linkCliente())}</div>
-        <div class="botoes" style="margin-top:10px">
-          <button class="btn whats" data-a="enviar-link">📲 Enviar</button>
-          <button class="btn claro" data-a="copiar-link">📋 Copiar</button>
+        <div class="botoes">
+          <button class="btn eco" data-a="enviar-link">Enviar link</button>
+          <button class="btn sec" data-a="copiar-link">Copiar link</button>
         </div>
       </div>
     </main>`;
@@ -990,7 +997,10 @@ app.addEventListener('change', async (e) => {
   }
   await salvarOS(os);
   if (campo === 'agendamento' || campo === 'pagamento.pago') telaOS(os.id);
-  else { const r = $('#resumo'); if (r) r.innerHTML = resumoHTML(os); }
+  else {
+    const r = $('#resumo'); if (r) r.innerHTML = resumoHTML(os);
+    const tr = $('#total-rodape'); if (tr) tr.textContent = brl(calcular(os).total);
+  }
 });
 
 app.addEventListener('click', async (e) => {
@@ -1008,7 +1018,7 @@ app.addEventListener('click', async (e) => {
     case 'filtro': filtro = v; telaInicio(); break;
     case 'enviar-link':
       if (!cfg.whats) { toast('Cadastre seu WhatsApp nas configurações'); ir('#/config'); break; }
-      compartilhar(`Olá! 👋 Para solicitar um serviço elétrico${cfg.nome ? ' com ' + cfg.nome : ''}, é só preencher este formulário rapidinho:\n\n${linkCliente()}`);
+      compartilhar(`Olá! Para solicitar um serviço elétrico${cfg.nome ? ' com ' + cfg.nome : ''}, é só preencher este formulário rapidinho:\n\n${linkCliente()}`);
       break;
     case 'copiar-link': copiar(linkCliente()); break;
     case 'fazer-import': importarPedido($('#txt-imp').value); break;

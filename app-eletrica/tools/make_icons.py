@@ -1,4 +1,4 @@
-"""Gera os ícones do launcher (raio amarelo sobre fundo azul-escuro)."""
+"""Gera os ícones do launcher: raio branco sobre brand (#1b1b87), cores do Kit de Cotação."""
 import os
 import sys
 
@@ -11,10 +11,10 @@ BIG = 1024
 def master():
     img = Image.new("RGBA", (BIG, BIG), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.rounded_rectangle([40, 40, BIG - 40, BIG - 40], radius=220, fill=(15, 23, 42, 255))
-    d.ellipse([170, 170, BIG - 170, BIG - 170], fill=(30, 41, 59, 255))
+    d.rounded_rectangle([40, 40, BIG - 40, BIG - 40], radius=220, fill=(27, 27, 135, 255))
+    d.ellipse([170, 170, BIG - 170, BIG - 170], fill=(30, 82, 32, 255))
     bolt = [(580, 140), (300, 560), (480, 560), (420, 884), (724, 440), (540, 440), (640, 140)]
-    d.polygon(bolt, fill=(250, 204, 21, 255))
+    d.polygon(bolt, fill=(255, 255, 255, 255))
     return img
 
 
